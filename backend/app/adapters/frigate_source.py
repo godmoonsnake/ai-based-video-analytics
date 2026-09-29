@@ -39,6 +39,19 @@ def is_terminal(msg: dict[str, Any]) -> bool:
     return msg.get("type") == "end"
 
 
+def is_false_positive(msg: dict[str, Any]) -> bool:
+    """True when Frigate marks the tracked object as a false positive.
+
+    Frigate only publishes the first `frigate/events` message once an object is
+    no longer a false positive, but a robust read-only consumer still defensively
+    drops any message whose current (`after`) state is flagged false_positive.
+    This source-specific filtering lives in the adapter so the normalizer and the
+    downstream intelligence pipeline stay source-agnostic.
+    """
+    obj = msg.get("after") or msg.get("before") or msg
+    return bool(obj.get("false_positive", False))
+
+
 class FrigateReplaySource(EventSource):
     """Replays a recorded list of Frigate messages (offline, no broker).
 
@@ -50,13 +63,17 @@ class FrigateReplaySource(EventSource):
     name = "frigate"
 
     def __init__(self, messages: list[dict], api_base: str | None = None,
-                 emit_updates: bool = False):
+                 emit_updates: bool | None = None):
         self.messages = messages
         self.api_base = api_base or _settings.frigate_api_base
-        self.emit_updates = emit_updates
+        self.emit_updates = (
+            _settings.frigate_emit_updates if emit_updates is None else emit_updates
+        )
 
     def stream(self) -> Iterator[CanonicalEvent]:
         for msg in self.messages:
+            if is_false_positive(msg):
+                continue  # never surface false positives to the pipeline
             if self.emit_updates or is_terminal(msg):
                 yield decode_message(msg, api_base=self.api_base)
 
@@ -72,12 +89,14 @@ class FrigateMqttSource(EventSource):
 
     def __init__(self, host: str | None = None, port: int | None = None,
                  topic: str | None = None, api_base: str | None = None,
-                 emit_updates: bool = False):
+                 emit_updates: bool | None = None):
         self.host = host or _settings.frigate_mqtt_host
         self.port = port or _settings.frigate_mqtt_port
         self.topic = topic or _settings.frigate_mqtt_topic
         self.api_base = api_base or _settings.frigate_api_base
-        self.emit_updates = emit_updates
+        self.emit_updates = (
+            _settings.frigate_emit_updates if emit_updates is None else emit_updates
+        )
         self._q: "queue.Queue[CanonicalEvent]" = queue.Queue()
         self._stop = threading.Event()
 
@@ -85,6 +104,8 @@ class FrigateMqttSource(EventSource):
         try:
             msg = json.loads(message.payload)
         except (ValueError, TypeError):
+            return
+        if is_false_positive(msg):
             return
         if self.emit_updates or is_terminal(msg):
             self._q.put(decode_message(msg, api_base=self.api_base))

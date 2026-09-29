@@ -1,0 +1,76 @@
+# Frigate development configuration for the DARSON intelligence layer.
+#
+# PURPOSE
+#   A fully self-contained Frigate instance for local development that requires
+#   NO real CCTV credentials and NO physical cameras. The camera feed is a
+#   synthetic test pattern generated in-process by ffmpeg's built-in `lavfi`
+#   source. Bring the stack up with `docker compose --profile frigate up`;
+#   Frigate connects to the same MQTT broker the DARSON FrigateAdapter uses.
+#
+# SCOPE (read-only integration)
+#   DARSON consumes Frigate as an event source only. It never writes to Frigate.
+#   Frigate is the video/event foundation; DARSON is the intelligence layer.
+#
+# Verified against the official Frigate 0.18 configuration reference. No `version`
+# key is set on purpose so Frigate does not attempt to migrate this file (the
+# config is mounted read-only and is the single source of truth).
+
+mqtt:
+  enabled: true
+  host: mosquitto
+  port: 1883
+  topic_prefix: frigate
+  # No authentication in dev; the broker is on the internal compose network only.
+  # Provide credentials via environment substitution in production.
+
+# Synthetic camera feed generated directly by Frigate's own ffmpeg using the
+# built-in `lavfi` test-source filter. NO physical camera, NO CCTV credentials,
+# NO external producer — ffmpeg synthesizes the frames in-process. The global
+# input_args make the input "path" a lavfi virtual device.
+ffmpeg:
+  input_args: -re -stream_loop -1 -f lavfi
+
+cameras:
+  dev_synthetic:
+    enabled: true
+    ffmpeg:
+      inputs:
+        # `testsrc` is ffmpeg's built-in synthetic pattern generator. Only the
+        # `detect` role is used (raw frames); recording a synthetic pattern adds
+        # no value, so it is intentionally omitted to keep the dev camera simple.
+        - path: testsrc=size=1280x720:rate=5
+          roles:
+            - detect
+    detect:
+      enabled: true
+      width: 1280
+      height: 720
+      fps: 5
+    # Zones let DARSON exercise zone_enter / dwell canonical event types.
+    zones:
+      entry_zone:
+        coordinates: 0,720,0,360,640,360,640,720
+      restricted:
+        coordinates: 640,720,640,360,1280,360,1280,720
+
+# The bundled CPU detector needs no accelerator hardware, keeping the dev setup
+# runnable anywhere. Not for production throughput.
+detectors:
+  cpu1:
+    type: cpu
+    num_threads: 2
+
+# Object types DARSON's canonical schema cares about for the demo scenarios.
+objects:
+  track:
+    - person
+    - car
+
+# Snapshots enable the evidence-traceability path (Incident -> Event -> Camera
+# -> Evidence) via Frigate's HTTP API: GET /api/events/<id>/snapshot.jpg
+# A real deployment adds a `record` role + `record:` block to also serve
+# /api/events/<id>/clip.mp4.
+snapshots:
+  enabled: true
+  retain:
+    default: 2

@@ -68,13 +68,25 @@ def ingest_mock(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/ingest/frigate/replay")
-def ingest_frigate_replay(messages: list[dict], db: Session = Depends(get_db)) -> dict:
+def ingest_frigate_replay(messages: list[dict], prepare_pipeline: bool = False,
+                          db: Session = Depends(get_db)) -> dict:
     """Replay a recorded list of Frigate `frigate/events` messages (demo helper).
 
     Proves the Frigate integration path without a live broker: the same messages
     a broker would deliver are mapped to canonical events and ingested.
+
+    With prepare_pipeline=true the endpoint also seeds camera topology and
+    appearance embeddings so the downstream source-agnostic pipeline
+    (correlation, incidents) can run directly on Frigate-sourced events.
     """
     from app.adapters.frigate_source import FrigateReplaySource
 
+    if prepare_pipeline:
+        load_topology(db)
     count = ingest_source(db, FrigateReplaySource(messages))
-    return {"ingested": count, "source": "frigate"}
+    result = {"ingested": count, "source": "frigate"}
+    if prepare_pipeline:
+        from app.adapters.ingestion import seed_embeddings
+
+        result["embeddings"] = seed_embeddings(db)
+    return result

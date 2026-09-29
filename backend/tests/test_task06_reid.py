@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.adapters.ingestion import ingest_source, seed_embeddings
-from app.adapters.mock_source import MockEventSource, load_topology
 from app.db.session import SessionLocal
 from app.main import app
 from app.pipeline.reid_service import (

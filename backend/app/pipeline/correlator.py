@@ -23,7 +23,6 @@ PII — appearance is a similarity signal only.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from sqlalchemy import select

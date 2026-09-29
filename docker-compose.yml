@@ -48,16 +48,38 @@ services:
 
   # Optional: run Frigate as a real event source. Enable with:
   #   docker compose --profile frigate up
+  #
+  # Uses a synthetic test-pattern camera (deploy/frigate-config.yml) so it needs
+  # NO real CCTV credentials and NO physical cameras. Frigate publishes real
+  # frigate/events messages to mosquitto, which the backend's FrigateMqttSource
+  # consumes when DARSON_EVENT_SOURCE=frigate.
   frigate:
     image: ghcr.io/blakeblackshear/frigate:stable
     profiles: ["frigate"]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    # SHM for a single 720p detect stream (see Frigate SHM calculator). Raise for
+    # more/higher-resolution cameras.
     shm_size: "128mb"
     depends_on:
       - mosquitto
     volumes:
       - ./deploy/frigate-config.yml:/config/config.yml:ro
+      - frigate_media:/media/frigate
+      # In-memory cache for recording segments (recommended by Frigate docs).
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000
     ports:
-      - "5000:5000"
+      - "8971:8971"   # Authenticated UI/API
+      - "5000:5000"   # Internal unauthenticated API — what DARSON integrates against
+      - "8554:8554"   # RTSP restream (go2rtc)
+      - "8555:8555/tcp"  # WebRTC
+      - "8555:8555/udp"  # WebRTC
+    environment:
+      TZ: "UTC"
 
 volumes:
   db_data:
+  frigate_media:

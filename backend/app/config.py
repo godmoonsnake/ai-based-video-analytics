@@ -20,11 +20,21 @@ class Settings(BaseSettings):
     # Event source toggle: "mock" (offline scenarios) or "frigate" (real adapter).
     event_source: str = "mock"
 
-    # Frigate integration (read-only).
+    # Frigate integration (read-only). We CONSUME Frigate; we never write to it.
+    #
+    # Required subscription: `frigate/events` carries the tracked-object lifecycle
+    # (type new/update/end with before/after states) — this is the only topic the
+    # DARSON adapter needs to build canonical events. `frigate/reviews` is an
+    # optional higher-level stream (detection/alert review items) kept here for
+    # forward use; it is NOT required by the current adapter.
     frigate_mqtt_host: str = "localhost"
     frigate_mqtt_port: int = 1883
     frigate_mqtt_topic: str = "frigate/events"
+    frigate_mqtt_reviews_topic: str = "frigate/reviews"
     frigate_api_base: str = "http://localhost:5000"
+    # Ingest a tracked object once it finalizes (type == "end") by default. Set
+    # true to emit every new/update message (higher volume, earlier signal).
+    frigate_emit_updates: bool = False
 
     # Cross-camera correlation weights and threshold.
     corr_weight_time: float = 0.34
