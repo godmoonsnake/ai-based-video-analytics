@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 
 revision = "a7f0455fcb94"
-down_revision = None
+down_revision = "0001_baseline"
 branch_labels = None
 depends_on = None
 

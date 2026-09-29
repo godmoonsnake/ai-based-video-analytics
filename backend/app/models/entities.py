@@ -154,6 +154,9 @@ class Incident(Base):
     edges: Mapped[list["IncidentEdge"]] = relationship(back_populates="incident")
     nodes: Mapped[list["IncidentNode"]] = relationship(back_populates="incident")
     graph_edges: Mapped[list["IncidentGraphEdge"]] = relationship(back_populates="incident")
+    state_transitions: Mapped[list["IncidentStateTransition"]] = relationship(
+        back_populates="incident"
+    )
 
 
 class IncidentCamera(Base):
@@ -253,6 +256,32 @@ class IncidentGraphEdge(Base):
     incident: Mapped[Incident] = relationship(back_populates="graph_edges")
     source_node: Mapped[IncidentNode] = relationship(foreign_keys=[source_node_id])
     target_node: Mapped[IncidentNode] = relationship(foreign_keys=[target_node_id])
+
+
+class IncidentStateTransition(Base):
+    """Append-only history of incident lifecycle state changes.
+
+    Records every accepted transition of an incident through the human-in-the-loop
+    lifecycle (open -> triage -> confirmed|dismissed). This table is the audit
+    trail for review decisions; it is never mutated in place. `reviewer` is a
+    free-form operator handle/role label (e.g. "operator", "shift_lead"), NOT a
+    person's identity — no PII beyond an optional handle is stored.
+    """
+
+    __tablename__ = "incident_state_transition"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(
+        ForeignKey("incident.id"), index=True, nullable=False
+    )
+    from_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    to_state: Mapped[str] = mapped_column(String, nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)  # start_triage|confirm|dismiss|reopen
+    reviewer: Mapped[str | None] = mapped_column(String, nullable=True)  # handle/role only, no PII
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    incident: Mapped[Incident] = relationship(back_populates="state_transitions")
 
 
 class BehaviouralSequence(Base):

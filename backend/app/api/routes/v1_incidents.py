@@ -13,6 +13,7 @@ Response shapes are designed so a UI can render, without extra round-trips:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,12 @@ from app.pipeline.incident_graph import (
     confidence_band,
     graph_as_dict,
     graph_timeline,
+)
+from app.pipeline.incident_lifecycle import (
+    InvalidTransition,
+    allowed_actions,
+    apply_transition,
+    transition_history,
 )
 
 router = APIRouter(prefix="/api/v1/incidents", tags=["incidents-v1"])
@@ -85,6 +92,8 @@ def incident_detail(incident_id: int, db: Session = Depends(get_db)) -> dict:
 
     detail = _summary(db, inc)
     detail.update({
+        "state": inc.status or "open",
+        "allowed_actions": allowed_actions(inc.status or "open"),
         "tracks": tracks,
         "events": events,
         "explanation": build_explanation(db, incident_id),
@@ -112,3 +121,58 @@ def incident_explanation(incident_id: int, db: Session = Depends(get_db)) -> dic
     """Machine-readable explanation object (why the incident was created)."""
     _get_incident_or_404(db, incident_id)
     return build_explanation(db, incident_id)
+
+
+# --------------------------------------------------------------------------
+# Lifecycle (human-in-the-loop review state)
+# --------------------------------------------------------------------------
+
+class TransitionIn(BaseModel):
+    action: str  # start_triage | confirm | dismiss | reopen
+    reviewer: str | None = None  # operator handle/role only, no PII
+    note: str | None = None
+
+
+@router.get("/{incident_id}/state")
+def incident_state(incident_id: int, db: Session = Depends(get_db)) -> dict:
+    """Current lifecycle state + the actions available from it."""
+    inc = _get_incident_or_404(db, incident_id)
+    state = inc.status or "open"
+    return {
+        "incident_id": incident_id,
+        "state": state,
+        "allowed_actions": allowed_actions(state),
+    }
+
+
+@router.post("/{incident_id}/state")
+def change_incident_state(
+    incident_id: int, body: TransitionIn, db: Session = Depends(get_db)
+) -> dict:
+    """Apply a lifecycle transition. Invalid transitions return 409.
+
+    Non-destructive: only the incident status changes and a history row is
+    appended — the incident graph, nodes, edges, and evidence are not mutated.
+    """
+    inc = _get_incident_or_404(db, incident_id)
+    try:
+        t = apply_transition(db, inc, body.action, reviewer=body.reviewer, note=body.note)
+    except InvalidTransition as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {
+        "incident_id": incident_id,
+        "from_state": t.from_state,
+        "state": t.to_state,
+        "action": t.action,
+        "allowed_actions": allowed_actions(t.to_state),
+    }
+
+
+@router.get("/{incident_id}/state/history")
+def incident_state_history(incident_id: int, db: Session = Depends(get_db)) -> dict:
+    """Ordered lifecycle transition history for an incident."""
+    _get_incident_or_404(db, incident_id)
+    return {
+        "incident_id": incident_id,
+        "history": transition_history(db, incident_id),
+    }
