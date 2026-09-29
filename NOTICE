@@ -1,0 +1,22 @@
+DARSON Intelligence Layer
+=========================
+
+This project is an original work built as an academic prototype for DARSON Group.
+
+Third-party attributions
+-------------------------
+
+Frigate (https://github.com/blakeblackshear/frigate) — MIT License.
+  Consumed as an optional external event source and evidence store via its MQTT
+  event stream and HTTP API. Frigate is NOT bundled, forked, or modified by this
+  project. The "Frigate" name and logo are trademarks of Frigate, Inc. and are
+  not used to brand this project.
+
+SENTINEL-X (https://github.com/Aariz857/nsg_ai-assistance-defence) — MIT License.
+  Used as a conceptual reference only (the Detect -> Connect -> Report structure
+  and explainable-incident-card idea). No source code was copied; all
+  corresponding functionality here is an independent reimplementation.
+
+OSNet / TorchReID (https://github.com/KaiyangZhou/deep-person-reid) — MIT License.
+  Referenced for appearance-embedding based re-identification used in
+  cross-camera correlation (spatial/temporal/appearance only; no identity DB).

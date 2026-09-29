@@ -1,0 +1,63 @@
+# DARSON Intelligence Layer — deployment stack.
+# The intelligence layer sits ABOVE an existing VMS. Frigate is included only as
+# an OPTIONAL event source for the real adapter (profile "frigate"); the default
+# demo path uses the built-in mock event source and needs only db + mosquitto.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: darson
+      POSTGRES_PASSWORD: darson
+      POSTGRES_DB: darson
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U darson"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DARSON_DATABASE_URL: postgresql+psycopg2://darson:darson@db:5432/darson
+      DARSON_EVENT_SOURCE: mock
+      DARSON_FRIGATE_MQTT_HOST: mosquitto
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+  # Optional: run Frigate as a real event source. Enable with:
+  #   docker compose --profile frigate up
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    profiles: ["frigate"]
+    shm_size: "128mb"
+    depends_on:
+      - mosquitto
+    volumes:
+      - ./deploy/frigate-config.yml:/config/config.yml:ro
+    ports:
+      - "5000:5000"
+
+volumes:
+  db_data:

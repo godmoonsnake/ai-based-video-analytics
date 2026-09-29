@@ -1,0 +1,7 @@
+# Optional heavy dependencies for the REAL OSNet Re-ID backend.
+# Not required for the prototype/tests (which use the deterministic mock backend).
+# Install these only when embedding real Frigate snapshot crops with OSNet.
+torch>=2.2
+torchvision>=0.17
+torchreid>=1.4.0
+Pillow>=10.0

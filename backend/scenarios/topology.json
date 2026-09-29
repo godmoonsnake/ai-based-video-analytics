@@ -1,0 +1,19 @@
+{
+  "cameras": [
+    {"id": "gate_3",      "name": "Gate 3 (Entry)",        "site_id": "site_a", "x": 0.0,  "y": 0.0},
+    {"id": "corridor_1",  "name": "Corridor 1 (Transit)",  "site_id": "site_a", "x": 10.0, "y": 0.0},
+    {"id": "restricted_2","name": "Restricted 2",          "site_id": "site_a", "x": 20.0, "y": 5.0},
+    {"id": "exit_4",      "name": "Exit 4",                "site_id": "site_a", "x": 30.0, "y": 0.0}
+  ],
+  "edges": [
+    {"from": "gate_3",       "to": "corridor_1",   "walk_seconds_min": 4,  "walk_seconds_max": 20, "bidirectional": true},
+    {"from": "corridor_1",   "to": "restricted_2", "walk_seconds_min": 3,  "walk_seconds_max": 18, "bidirectional": true},
+    {"from": "restricted_2", "to": "exit_4",       "walk_seconds_min": 4,  "walk_seconds_max": 22, "bidirectional": true}
+  ],
+  "zones": [
+    {"camera_id": "gate_3",       "name": "entry_zone",      "kind": "entry"},
+    {"camera_id": "corridor_1",   "name": "transit_zone",    "kind": "transit"},
+    {"camera_id": "restricted_2", "name": "restricted",      "kind": "restricted"},
+    {"camera_id": "exit_4",       "name": "exit_zone",       "kind": "exit"}
+  ]
+}

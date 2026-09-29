@@ -1,0 +1,54 @@
+[
+  {
+    "type": "new",
+    "after": {
+      "id": "1700000001.10-aaa", "camera": "gate_3", "label": "person",
+      "sub_label": null, "score": 0.83, "top_score": 0.9,
+      "start_time": 1700000001.0, "end_time": null, "frame_time": 1700000002.0,
+      "box": [420, 480, 540, 720], "region": [200, 400, 700, 900],
+      "current_zones": ["entry_zone"], "entered_zones": ["entry_zone"],
+      "stationary": false, "motionless_count": 0,
+      "has_snapshot": true, "has_clip": false, "velocity_angle": 90,
+      "average_estimated_speed": 1.2
+    }
+  },
+  {
+    "type": "update",
+    "after": {
+      "id": "1700000001.10-aaa", "camera": "gate_3", "label": "person",
+      "sub_label": ["red_bag", 0.72], "score": 0.9, "top_score": 0.92,
+      "start_time": 1700000001.0, "end_time": null, "frame_time": 1700000004.0,
+      "box": [430, 470, 545, 715], "region": [205, 402, 705, 905],
+      "current_zones": ["entry_zone"], "entered_zones": ["entry_zone"],
+      "stationary": false, "motionless_count": 0,
+      "has_snapshot": true, "has_clip": true, "velocity_angle": 90,
+      "average_estimated_speed": 1.25
+    }
+  },
+  {
+    "type": "end",
+    "after": {
+      "id": "1700000001.10-aaa", "camera": "gate_3", "label": "person",
+      "sub_label": ["red_bag", 0.72], "score": 0.9, "top_score": 0.92,
+      "start_time": 1700000001.0, "end_time": 1700000006.0, "frame_time": 1700000006.0,
+      "box": [430, 470, 545, 715], "region": [205, 402, 705, 905],
+      "current_zones": ["entry_zone"], "entered_zones": ["entry_zone"],
+      "stationary": false, "motionless_count": 0,
+      "has_snapshot": true, "has_clip": true, "velocity_angle": 90,
+      "average_estimated_speed": 1.25
+    }
+  },
+  {
+    "type": "end",
+    "after": {
+      "id": "1700000020.44-bbb", "camera": "restricted_2", "label": "person",
+      "sub_label": ["red_bag", 0.70], "score": 0.88, "top_score": 0.9,
+      "start_time": 1700000020.0, "end_time": 1700000130.0, "frame_time": 1700000130.0,
+      "box": [430, 460, 560, 730], "region": [210, 400, 710, 910],
+      "current_zones": ["restricted"], "entered_zones": ["restricted"],
+      "stationary": true, "motionless_count": 95,
+      "has_snapshot": true, "has_clip": true, "velocity_angle": 0,
+      "average_estimated_speed": 0.1
+    }
+  }
+]

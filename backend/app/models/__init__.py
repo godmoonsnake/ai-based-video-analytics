@@ -1,0 +1,17 @@
+from app.models.entities import (  # noqa: F401
+    AuditLog,
+    BehaviouralSequence,
+    Camera,
+    CameraEdge,
+    Event,
+    GlobalTrack,
+    GlobalTrackMember,
+    HistoricalPattern,
+    Incident,
+    IncidentCamera,
+    IncidentEdge,
+    IncidentEvent,
+    OperatorFeedback,
+    TrackEmbedding,
+    Zone,
+)
