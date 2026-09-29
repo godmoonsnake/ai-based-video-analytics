@@ -1,0 +1,102 @@
+# Frigate REAL-VIDEO development configuration for DARSON.
+#
+# PURPOSE
+#   Runs Frigate against PRERECORDED sample videos containing detectable people,
+#   so the whole DARSON pipeline can be validated with genuine person detections
+#   and real snapshot/clip evidence — WITHOUT any physical camera or CCTV
+#   credentials. Each "camera" is an mp4 file looped in-process by Frigate's own
+#   ffmpeg (direct file input), mounted read-only at /media/videos.
+#
+#   Fetch the videos first (they are gitignored, CC-BY-4.0):
+#     ./scripts/fetch_test_videos.sh      (or .ps1 on Windows)
+#
+# SCOPE
+#   DARSON consumes Frigate read-only. The three cameras form an A -> B -> C
+#   topology used to demonstrate cross-camera MOVEMENT correlation (topology +
+#   time + appearance signal) — NOT human identity.
+#
+# Verified against the current Frigate 0.18 configuration reference. Looping file
+# input uses `-re -stream_loop -1 -fflags +genpts` (community-standard for feeding
+# a recorded file to Frigate's detector).
+
+mqtt:
+  enabled: true
+  host: mosquitto
+  port: 1883
+  topic_prefix: frigate
+
+# Global ffmpeg input args: read a local file at native rate, loop forever, and
+# regenerate presentation timestamps so the looped file behaves like a live feed.
+ffmpeg:
+  input_args: -re -stream_loop -1 -fflags +genpts
+
+detectors:
+  cpu1:
+    type: cpu
+    num_threads: 2
+
+# Only track people for this validation (the clips are pedestrian footage).
+objects:
+  track:
+    - person
+
+# Snapshots + recordings power the evidence path:
+#   GET /api/events/<id>/snapshot.jpg  and  /api/events/<id>/clip.mp4
+snapshots:
+  enabled: true
+  retain:
+    default: 1
+
+# Frigate 0.18 record schema: keep short motion recordings + clips overlapping
+# detections, so real clip evidence (GET /api/events/<id>/clip.mp4) exists.
+record:
+  enabled: true
+  motion:
+    days: 1
+  detections:
+    retain:
+      days: 1
+      mode: motion
+
+cameras:
+  cam_a:
+    ffmpeg:
+      inputs:
+        - path: /media/videos/people-detection.mp4
+          roles: [detect, record]
+    detect:
+      enabled: true
+      width: 768
+      height: 432
+      fps: 5
+    zones:
+      a_entry:
+        coordinates: 0,432,0,216,768,216,768,432
+
+  cam_b:
+    ffmpeg:
+      inputs:
+        - path: /media/videos/store-aisle-detection.mp4
+          roles: [detect, record]
+    detect:
+      enabled: true
+      width: 768
+      height: 432
+      fps: 5
+    zones:
+      b_transit:
+        coordinates: 0,432,0,216,768,216,768,432
+
+  cam_c:
+    ffmpeg:
+      inputs:
+        - path: /media/videos/one-by-one-person-detection.mp4
+          roles: [detect, record]
+    detect:
+      enabled: true
+      width: 768
+      height: 432
+      fps: 5
+    zones:
+      c_restricted:
+        coordinates: 0,432,0,216,768,216,768,432

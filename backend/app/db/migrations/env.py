@@ -15,8 +15,12 @@ from app.db.session import Base
 import app.models  # noqa: F401  register models on metadata
 
 config = context.config
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# Only apply Alembic's file-based logging config when running the Alembic CLI
+# standalone. When migrations are invoked programmatically at app startup
+# (init_db -> command.upgrade), skip it so we do not disable the app/uvicorn
+# loggers (fileConfig defaults to disable_existing_loggers=True).
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Prefer a URL explicitly provided on the Alembic config (e.g. by init_db or
 # tests targeting a specific database); fall back to application settings.

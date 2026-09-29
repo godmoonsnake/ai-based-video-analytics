@@ -84,6 +84,7 @@ code { background: #0b0f14; padding: 1px 5px; border-radius: 4px; font-size: 12p
 .detail-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .detail-when { margin-top: 6px; font-size: 13px; }
 .detail-summary { margin: 8px 0 0; color: var(--text); font-size: 14px; }
+.detail-disclaimer { margin: 6px 0 0; color: var(--muted); font-size: 12px; font-style: italic; border-left: 2px solid var(--line); padding-left: 8px; }
 .detail-section { border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; background: var(--panel); }
 .section-head { width: 100%; display: flex; align-items: center; gap: 8px; background: transparent; color: var(--text); padding: 10px 14px; font-size: 14px; font-weight: 600; }
 .section-caret { color: var(--muted); }
@@ -104,6 +105,7 @@ code { background: #0b0f14; padding: 1px 5px; border-radius: 4px; font-size: 12p
 
 /* Correlations */
 .correlations { display: flex; flex-direction: column; gap: 10px; }
+.corr-note { margin: 0 0 4px; color: var(--muted); font-size: 12px; font-style: italic; }
 .correlation-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--panel-2); }
 .correlation-head { display: flex; justify-content: space-between; font-weight: 600; }
 .corr-transition { color: var(--purple); }

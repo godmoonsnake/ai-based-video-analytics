@@ -1,0 +1,16 @@
+{
+  "cameras": [
+    {"id": "cam_a", "name": "Camera A (Entry)",     "site_id": "site_real", "x": 0.0,  "y": 0.0},
+    {"id": "cam_b", "name": "Camera B (Transit)",   "site_id": "site_real", "x": 10.0, "y": 0.0},
+    {"id": "cam_c", "name": "Camera C (Restricted)", "site_id": "site_real", "x": 20.0, "y": 0.0}
+  ],
+  "edges": [
+    {"from": "cam_a", "to": "cam_b", "walk_seconds_min": 1, "walk_seconds_max": 120, "bidirectional": true},
+    {"from": "cam_b", "to": "cam_c", "walk_seconds_min": 1, "walk_seconds_max": 120, "bidirectional": true}
+  ],
+  "zones": [
+    {"camera_id": "cam_a", "name": "a_entry",      "kind": "entry"},
+    {"camera_id": "cam_b", "name": "b_transit",    "kind": "transit"},
+    {"camera_id": "cam_c", "name": "c_restricted", "kind": "restricted"}
+  ]
+}

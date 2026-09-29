@@ -20,13 +20,29 @@ from app.api.routes import (
     tracks,
     v1_incidents,
 )
+from app.config import get_settings
 from app.db.init_db import init_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    yield
+    # When configured for the live Frigate source, drain frigate/events into the
+    # DB via a background daemon thread. The mock deployment does not start this.
+    ingestor = None
+    settings = get_settings()
+    if settings.event_source == "frigate":
+        from app.adapters.consumer import BackgroundIngestor
+        from app.adapters.factory import make_event_source
+
+        ingestor = BackgroundIngestor(make_event_source())
+        ingestor.start()
+        app.state.ingestor = ingestor
+    try:
+        yield
+    finally:
+        if ingestor is not None:
+            ingestor.stop()
 
 
 app = FastAPI(

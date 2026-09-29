@@ -119,6 +119,63 @@ scenario (and captured Frigate payload fixtures in the tests). A real deployment
 requires real camera/video feeding Frigate to generate detections and real
 snapshot/clip media.
 
+## Real-video validation (genuine person detection, no camera)
+
+To validate the pipeline with **real detectable video** — actual people detected
+by Frigate's model — without any camera or CCTV credentials, use the real-video
+overlay. It runs Frigate against prerecorded pedestrian clips (looped in-process
+by Frigate's own ffmpeg) and drains the **live** `frigate/events` MQTT stream
+into DARSON via a background ingestor.
+
+```
+./scripts/fetch_test_videos.sh          # fetch CC-BY-4.0 sample clips (gitignored)
+docker compose -f docker-compose.yml -f docker-compose.real-video.yml up -d --build
+# or simply:  ./scripts/demo.sh real     (.\scripts\demo.ps1 real on Windows)
+```
+Then open **http://localhost:8080**.
+
+- **Test videos**: `intel-iot-devkit/sample-videos` (license **CC-BY-4.0**,
+  attribution: Intel IoT DevKit). Fetched on demand into `deploy/videos/` and
+  **never committed** (gitignored). Three clips become three cameras
+  (`cam_a → cam_b → cam_c`).
+- **Frigate config**: `deploy/frigate-config.real.yml` — direct ffmpeg file input
+  (`-re -stream_loop -1 -fflags +genpts`), CPU detector, `person` tracking,
+  snapshots + recordings for real evidence.
+- **Backend**: with `DARSON_EVENT_SOURCE=frigate`, a background ingestor
+  subscribes to `frigate/events` and persists real detections; run
+  `correlate` + `build_incidents` (the `demo.sh real` flow does this) to produce
+  incidents from the real tracks.
+- **Evidence**: real snapshots are served browser-reachably at
+  `/frigate/api/events/<id>/snapshot.jpg` through the reverse proxy.
+
+### GPU requirements
+- The dev setup uses Frigate's **CPU detector** and DARSON's **deterministic mock
+  Re-ID backend**, so **no GPU is required** (and none is used in the validated
+  dev environment — there is no GPU memory figure to report here).
+- Production throughput benefits from a hardware detector (Coral/GPU) for Frigate
+  and, if enabled, an OSNet/TorchReID GPU backend for appearance embeddings
+  (`backend/requirements-reid.txt`). Those are optional and out of scope for the
+  dev validation.
+
+### Tested development behaviour vs intended production vs limitations
+- **Tested (dev, this repo)**: real person detection → `frigate/events` (MQTT) →
+  FrigateAdapter → CanonicalEvent → PostgreSQL → behaviour → cross-camera
+  **movement** correlation → incident graph → timeline → browser-reachable real
+  snapshot evidence → lifecycle persistence. Verified on the Docker/PostgreSQL/
+  pgvector stack.
+- **Intended production**: real cameras/RTSP feeding Frigate, a hardware
+  detector, an OSNet Re-ID backend over real snapshot crops, and hardened MQTT
+  credentials — all behind the same source-agnostic adapter boundary.
+- **Limitations / honest scope**:
+  - Cross-camera correlation is **movement** correlation from topology + timing +
+    appearance signals; it is **not** a claim of human identity.
+  - The Re-ID path in dev is a deterministic mock; **no labeled Re-ID accuracy is
+    claimed** — that requires a proper labeled evaluation dataset.
+  - The sample clips contain independent pedestrians, so cross-camera "same
+    movement" links are illustrative of the mechanism, not ground-truth identity.
+  - This is a validated development demonstration; it is **not** presented as
+    production-ready.
+
 ## Quick start (offline dev, no Docker)
 ```
 cd backend

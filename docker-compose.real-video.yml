@@ -1,0 +1,32 @@
+# Real-video override for the DARSON full stack.
+#
+# Layers on top of docker-compose.yml to validate the pipeline with GENUINE
+# person detections from prerecorded sample videos (no camera, no CCTV creds):
+#   - Frigate uses deploy/frigate-config.real.yml (3 file-input cameras)
+#   - the sample videos are mounted read-only at /media/videos
+#   - the backend consumes the LIVE Frigate MQTT source (frigate/events) via the
+#     background ingestor (DARSON_EVENT_SOURCE=frigate)
+#
+# Usage:
+#   ./scripts/fetch_test_videos.sh                       # once: fetch the clips
+#   docker compose -f docker-compose.yml -f docker-compose.real-video.yml up -d --build
+#
+# (The demo script wraps this — see scripts/demo.sh real.)
+services:
+  frigate:
+    volumes:
+      - ./deploy/frigate-config.real.yml:/config/config.yml:ro
+      - ./deploy/videos:/media/videos:ro
+      - frigate_media:/media/frigate
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000
+
+  backend:
+    environment:
+      DARSON_DATABASE_URL: postgresql+psycopg2://darson:darson@db:5432/darson
+      DARSON_EVENT_SOURCE: frigate
+      DARSON_FRIGATE_MQTT_HOST: mosquitto
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+      DARSON_FRIGATE_PUBLIC_BASE: /frigate

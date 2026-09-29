@@ -57,6 +57,11 @@ export function IncidentDetailPage({ incidentId, onStateChanged }: Props) {
           <span className="muted"> · {inc.cameras.length} cameras · {inc.tracks.length} tracks</span>
         </div>
         {inc.summary_text && <p className="detail-summary">{inc.summary_text}</p>}
+        <p className="detail-disclaimer">
+          Confidence is a system-derived signal from correlation and behaviour
+          evidence — decision support for human review, not a verdict or an
+          identity claim.
+        </p>
       </header>
 
       <Section title="Why this incident exists" count={inc.explanation.why_created.length}>

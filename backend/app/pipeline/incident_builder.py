@@ -43,13 +43,29 @@ def _zone_kinds_for_event(e: Event, kind_map: dict[tuple[str, str], str]) -> lis
 
 
 def find_triggers(db: Session) -> list[Event]:
-    """Trigger events: dwell/loiter inside a restricted zone."""
+    """Trigger events inside a restricted zone.
+
+    Two restricted-zone signals seed an incident:
+      - dwell/loiter (the strongest signal: lingering in a restricted area), and
+      - entry/presence (zone_enter/detection in a restricted zone) — a person
+        entering a restricted area is itself a reviewable event and is what real
+        pedestrian footage typically produces.
+    At most one trigger per (camera, track) is returned (dwell preferred over
+    entry) so one movement does not seed duplicate incidents.
+    """
     kind_map = _zone_kind_map(db)
-    triggers: list[Event] = []
+    dwell_by_key: dict[tuple[str, str], Event] = {}
+    entry_by_key: dict[tuple[str, str], Event] = {}
     for e in db.execute(select(Event)).scalars().all():
+        if "restricted" not in _zone_kinds_for_event(e, kind_map):
+            continue
+        key = (e.camera_id, e.track_local_id)
         if e.event_type in ("dwell", "loiter"):
-            if "restricted" in _zone_kinds_for_event(e, kind_map):
-                triggers.append(e)
+            dwell_by_key.setdefault(key, e)
+        elif e.event_type in ("zone_enter", "detection"):
+            entry_by_key.setdefault(key, e)
+    triggers: list[Event] = list(dwell_by_key.values())
+    triggers += [e for key, e in entry_by_key.items() if key not in dwell_by_key]
     return triggers
 
 

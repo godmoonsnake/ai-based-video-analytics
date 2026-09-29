@@ -25,6 +25,10 @@ function ScoreBar({ label, value }: { label: string; value: number | undefined }
 export function Correlations({ correlations }: Props) {
   return (
     <div className="correlations">
+      <p className="corr-note">
+        Cross-camera movement correlation from topology, timing and appearance
+        signals — not a claim of personal identity.
+      </p>
       {correlations.map((c, i) => (
         <div className="correlation-card" key={i} data-testid="correlation-card">
           <div className="correlation-head">

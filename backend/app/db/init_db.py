@@ -47,7 +47,11 @@ def _alembic_config() -> Config:
 
 def run_migrations() -> None:
     """Apply all Alembic migrations up to head (the schema source of truth)."""
-    command.upgrade(_alembic_config(), "head")
+    cfg = _alembic_config()
+    # Do not let Alembic's fileConfig reconfigure/disable the app+uvicorn loggers
+    # when we run migrations programmatically at startup.
+    cfg.attributes["configure_logger"] = False
+    command.upgrade(cfg, "head")
 
 
 def _bootstrap_mode() -> str:
