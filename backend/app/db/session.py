@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Iterator
 
-from sqlalchemy import String, TypeDecorator, create_engine
+from sqlalchemy import JSON, String, TypeDecorator, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -23,6 +23,18 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 
 class Base(DeclarativeBase):
     pass
+
+
+#: Portable JSON column. Uses PostgreSQL JSONB (indexable, binary) in production
+#: and falls back to the generic JSON type on SQLite for offline tests/demos.
+#: Declared as a module-level variant so ORM models can share one definition.
+def _portable_jsonb():
+    from sqlalchemy.dialects.postgresql import JSONB
+
+    return JSON().with_variant(JSONB(), "postgresql")
+
+
+JSONBType = _portable_jsonb()
 
 
 class Vector(TypeDecorator):

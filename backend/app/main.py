@@ -10,7 +10,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import cameras, events, health, incidents, patterns, search, tracks
+from app.api.routes import (
+    cameras,
+    events,
+    health,
+    incidents,
+    patterns,
+    search,
+    tracks,
+    v1_incidents,
+)
 from app.db.init_db import init_db
 
 
@@ -32,6 +41,7 @@ app.include_router(events.router)
 app.include_router(cameras.router)
 app.include_router(tracks.router)
 app.include_router(incidents.router)
+app.include_router(v1_incidents.router)
 app.include_router(patterns.router)
 app.include_router(search.router)
 

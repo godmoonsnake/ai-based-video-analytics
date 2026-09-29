@@ -29,8 +29,8 @@ from app.models.entities import (
     IncidentCamera,
     IncidentEdge,
     IncidentEvent,
-    Zone,
 )
+from app.pipeline.incident_graph import build_graph
 from app.pipeline.sequence_analyzer import analyze_events, _zone_kind_map
 
 # Priority mapping from the strongest zone kind touched + anomaly.
@@ -130,7 +130,7 @@ def build_incident_from_trigger(db: Session, trigger: Event) -> Incident:
             role = "context"
         db.add(IncidentEvent(incident_id=incident.id, event_id=e.id, role=role))
 
-    # Graph edges between consecutive events.
+    # Legacy event-to-event edges (kept for backward compatibility).
     for prev, cur in zip(events, events[1:]):
         if prev.camera_id == cur.camera_id and prev.track_local_id == cur.track_local_id:
             relation = "same_track"
@@ -144,15 +144,37 @@ def build_incident_from_trigger(db: Session, trigger: Event) -> Incident:
             relation=relation, delta_seconds=round(cur.ts - prev.ts, 2),
         ))
 
+    # Normalized incident graph (nodes + typed edges + evidence) and the
+    # documented confidence propagation. This is the source-agnostic graph layer.
+    gt_ids = [gt.id] if gt is not None else []
+    prop = build_graph(db, incident.id, events, gt_ids)
+    # Confidence now comes from the documented propagation method (min of the
+    # correlation-continuity and behaviour pillars), not the raw track score.
+    incident.confidence = prop["incident_confidence"]
+
     db.commit()
     db.refresh(incident)
     return incident
 
 
 def build_incidents(db: Session) -> list[int]:
-    """Build one incident per trigger. Returns new incident ids."""
+    """Build incidents from connected evidence.
+
+    Triggers that resolve to the SAME global track are merged into ONE incident
+    (justified by the existing cross-camera correlation), so a single correlated
+    movement never produces duplicate incidents. Triggers on distinct global
+    tracks (or with no global track) yield separate incidents. This is the
+    multi-track-aware, correlation-justified grouping the milestone requires —
+    incidents are built from connected evidence, not per raw detection.
+    """
     ids: list[int] = []
+    seen_global_tracks: set[int] = set()
     for trigger in find_triggers(db):
+        gt = _global_track_for(db, trigger.camera_id, trigger.track_local_id)
+        if gt is not None:
+            if gt.id in seen_global_tracks:
+                continue  # already covered by an incident for this movement
+            seen_global_tracks.add(gt.id)
         inc = build_incident_from_trigger(db, trigger)
         ids.append(inc.id)
     return ids

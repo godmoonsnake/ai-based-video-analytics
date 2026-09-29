@@ -20,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config import get_settings
-from app.db.session import Base, Vector
+from app.db.session import Base, JSONBType, Vector
 
 _EMB_DIM = get_settings().embedding_dim
 
@@ -152,6 +152,8 @@ class Incident(Base):
     cameras: Mapped[list["IncidentCamera"]] = relationship(back_populates="incident")
     events: Mapped[list["IncidentEvent"]] = relationship(back_populates="incident")
     edges: Mapped[list["IncidentEdge"]] = relationship(back_populates="incident")
+    nodes: Mapped[list["IncidentNode"]] = relationship(back_populates="incident")
+    graph_edges: Mapped[list["IncidentGraphEdge"]] = relationship(back_populates="incident")
 
 
 class IncidentCamera(Base):
@@ -186,6 +188,71 @@ class IncidentEdge(Base):
     delta_seconds: Mapped[float | None] = mapped_column(Float)
 
     incident: Mapped[Incident] = relationship(back_populates="edges")
+
+
+class IncidentNode(Base):
+    """A typed node in an incident's evidence graph.
+
+    Heterogeneous node referencing an existing domain entity. `ref_id` is the
+    string identity of the referenced entity, interpreted per `node_type`:
+      - event    -> Event.id (uuid string)
+      - track    -> GlobalTrack.id (as string)
+      - camera   -> Camera.id
+      - zone     -> "<camera_id>:<zone_name>"
+      - incident -> Incident.id (as string); the graph root node
+    Nodes are scoped to one incident so the graph is self-contained and a rebuild
+    can replace an incident's graph atomically. `attributes` holds a small,
+    display-ready JSON snapshot (e.g. event_type, ts, zone kind) so the UI/API
+    need not re-join every source table.
+    """
+
+    __tablename__ = "incident_node"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(
+        ForeignKey("incident.id"), index=True, nullable=False
+    )
+    node_type: Mapped[str] = mapped_column(String, nullable=False)  # event|track|camera|zone|incident
+    ref_id: Mapped[str] = mapped_column(String, nullable=False)
+    attributes: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    incident: Mapped[Incident] = relationship(back_populates="nodes")
+
+
+class IncidentGraphEdge(Base):
+    """A typed, explainable edge between two IncidentNodes.
+
+    edge_type is one of:
+      event_to_track | track_to_camera | event_to_zone | temporal |
+      movement | correlation | sequence | incident_membership
+    `confidence` is populated for inferred edges (correlation/movement/sequence);
+    structural edges (membership/containment) leave it null. `evidence` is a JSONB
+    object of the signals that justify the edge (topology transition, temporal
+    gap, appearance similarity, correlation sub-scores, behaviour risk, etc.) so
+    every inferred edge is explainable from stored data.
+    """
+
+    __tablename__ = "incident_graph_edge"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(
+        ForeignKey("incident.id"), index=True, nullable=False
+    )
+    source_node_id: Mapped[int] = mapped_column(
+        ForeignKey("incident_node.id"), nullable=False
+    )
+    target_node_id: Mapped[int] = mapped_column(
+        ForeignKey("incident_node.id"), nullable=False
+    )
+    edge_type: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    evidence: Mapped[dict | None] = mapped_column(JSONBType, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    incident: Mapped[Incident] = relationship(back_populates="graph_edges")
+    source_node: Mapped[IncidentNode] = relationship(foreign_keys=[source_node_id])
+    target_node: Mapped[IncidentNode] = relationship(foreign_keys=[target_node_id])
 
 
 class BehaviouralSequence(Base):
