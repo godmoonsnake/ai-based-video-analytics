@@ -54,8 +54,14 @@ def normalize_frigate_event(msg: dict[str, Any], api_base: str | None = None) ->
 
     has_snapshot = bool(after.get("has_snapshot", False))
     has_clip = bool(after.get("has_clip", False))
-    snapshot_url = f"{api_base}/api/events/{source_event_id}/snapshot.jpg" if has_snapshot else None
-    clip_url = f"{api_base}/api/events/{source_event_id}/clip.mp4" if has_clip else None
+    # Evidence base: prefer the browser-facing public base (e.g. "/frigate" behind
+    # the reverse proxy) so the URL is reachable from the browser at the single
+    # proxy origin. Fall back to the (Docker-internal) api_base for dev/tests.
+    evidence_base = (_settings.frigate_public_base or "").rstrip("/") or api_base
+    snapshot_url = (
+        f"{evidence_base}/api/events/{source_event_id}/snapshot.jpg" if has_snapshot else None
+    )
+    clip_url = f"{evidence_base}/api/events/{source_event_id}/clip.mp4" if has_clip else None
 
     return CanonicalEvent(
         event_id=str(uuid.uuid4()),

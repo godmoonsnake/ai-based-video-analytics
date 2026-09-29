@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     frigate_mqtt_topic: str = "frigate/events"
     frigate_mqtt_reviews_topic: str = "frigate/reviews"
     frigate_api_base: str = "http://localhost:5000"
+    # Browser-facing base for evidence URLs. When set (e.g. "/frigate" behind the
+    # reverse proxy), evidence snapshot/clip URLs are built RELATIVE to this base
+    # so they are reachable from the browser at the single proxy origin, instead
+    # of the Docker-internal frigate_api_base (e.g. http://frigate:5000) which the
+    # browser cannot reach. Empty => fall back to frigate_api_base (dev/tests).
+    frigate_public_base: str = ""
     # Ingest a tracked object once it finalizes (type == "end") by default. Set
     # true to emit every new/update message (higher volume, earlier signal).
     frigate_emit_updates: bool = False

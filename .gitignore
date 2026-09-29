@@ -6,3 +6,6 @@ __pycache__/
 node_modules/
 dist/
 .pytest_cache/
+playwright-report/
+test-results/
+.playwright/

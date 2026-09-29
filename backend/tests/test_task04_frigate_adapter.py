@@ -125,3 +125,26 @@ def test_replay_drops_false_positive_messages():
     events = list(FrigateReplaySource(msgs, api_base="http://frigate:5000").stream())
     assert len(events) == 1
     assert events[0].source.source_event_id == "real-1"
+
+
+
+def test_public_base_produces_browser_reachable_relative_evidence_urls(monkeypatch):
+    """When frigate_public_base is set (reverse-proxy deployment), evidence URLs
+    are built RELATIVE to it (same-origin, browser-reachable) instead of the
+    Docker-internal api_base."""
+    from app.normalize import normalizer
+
+    monkeypatch.setattr(normalizer._settings, "frigate_public_base", "/frigate")
+    msg = {
+        "type": "end",
+        "after": {
+            "id": "1700000001.10-aaa", "camera": "gate_3", "label": "person",
+            "score": 0.9, "start_time": 1.0, "end_time": 6.0, "frame_time": 6.0,
+            "false_positive": False, "has_snapshot": True, "has_clip": True,
+        },
+    }
+    evt = decode_message(msg, api_base="http://frigate:5000")
+    assert evt.evidence.snapshot_url == "/frigate/api/events/1700000001.10-aaa/snapshot.jpg"
+    assert evt.evidence.clip_url == "/frigate/api/events/1700000001.10-aaa/clip.mp4"
+    # No Docker-internal hostname leaks into a browser-facing URL.
+    assert "frigate:5000" not in (evt.evidence.snapshot_url or "")
