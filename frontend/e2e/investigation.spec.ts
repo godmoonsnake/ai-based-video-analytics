@@ -5,28 +5,38 @@ import { test, expect, request } from "@playwright/test";
 // same proxy origin, then drive the dashboard UI and verify persistence.
 const ORIGIN = process.env.DARSON_ORIGIN ?? "http://localhost:8080";
 
+let demoIncidentId: number;
+
 test.beforeAll(async () => {
-  // Seed the deterministic demo pipeline via the proxy (idempotent enough for a
-  // demo: ingest mock scenario -> correlate -> build incident, persisted in PG).
+  // Seed the deterministic demo pipeline through the proxy (ingest mock scenario
+  // -> correlate -> build incident, persisted in PostgreSQL). Capture the built
+  // incident id so UI assertions target that exact incident regardless of how
+  // many incidents already exist (stable, ordering-independent). We open the
+  // incident that actually carries cross-camera correlations.
   const ctx = await request.newContext({ baseURL: ORIGIN });
   await ctx.post("/events/ingest/mock");
   await ctx.post("/tracks/correlate");
   const built = await ctx.post("/incidents/build");
   expect(built.ok()).toBeTruthy();
+  const list = await (await ctx.get("/api/v1/incidents")).json();
+  for (const inc of list) {
+    const d = await (await ctx.get(`/api/v1/incidents/${inc.id}`)).json();
+    if ((d.explanation?.correlations?.length ?? 0) > 0) {
+      demoIncidentId = inc.id;
+      break;
+    }
+  }
+  expect(demoIncidentId).toBeTruthy();
   await ctx.dispose();
 });
 
 test("operator investigation workflow persists to PostgreSQL", async ({ page }) => {
-  // 1. Open incident list.
+  // 1 & 2 & 3. Open the seeded incident (with correlations) from the list.
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /Incident Investigation/i })).toBeVisible();
-
-  // 2. Wait for the demo incident row to appear.
-  const firstRow = page.locator('[data-testid^="incident-row-"]').first();
-  await expect(firstRow).toBeVisible();
-
-  // 3. Open incident detail.
-  await firstRow.click();
+  const row = page.getByTestId(`incident-row-${demoIncidentId}`);
+  await expect(row).toBeVisible();
+  await row.click();
   await expect(page.getByTestId("incident-detail")).toBeVisible();
 
   // 4. Verify incident state is shown (open initially, unless already advanced).
@@ -63,7 +73,7 @@ test("operator investigation workflow persists to PostgreSQL", async ({ page }) 
 
   // 12. Reload the page.
   await page.reload();
-  await page.locator('[data-testid^="incident-row-"]').first().click();
+  await page.getByTestId(`incident-row-${demoIncidentId}`).click();
   await expect(page.getByTestId("incident-detail")).toBeVisible();
 
   // 13. Verify persisted state remains confirmed after reload (from PostgreSQL).
