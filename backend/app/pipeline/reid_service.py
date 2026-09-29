@@ -70,13 +70,34 @@ class MockEmbeddingBackend(EmbeddingBackend):
         rng = np.random.default_rng(int.from_bytes(h[:8], "big"))
         return _unit(rng.standard_normal(self.dim))
 
+    @staticmethod
+    def _jitter_seed(seed: str, idx: int) -> int:
+        """Stable, process-independent RNG seed for the per-call jitter.
+
+        Uses SHA-256 rather than Python's built-in hash(), which is randomized
+        per process (PYTHONHASHSEED) for str inputs. This guarantees the same
+        (seed, idx) always yields the same jitter -> deterministic embeddings
+        across processes.
+        """
+        h = hashlib.sha256(f"{seed}:{idx}".encode()).digest()
+        return int.from_bytes(h[:8], "big")
+
     def embed_seed(self, seed: str) -> list[float]:
         base = self._base_vector(seed)
         idx = self._counts.get(seed, 0)
         self._counts[seed] = idx + 1
         if self.jitter and idx > 0:
-            rng = np.random.default_rng(hash((seed, idx)) & 0xFFFFFFFF)
-            base = _unit(base + self.jitter * rng.standard_normal(self.dim))
+            rng = np.random.default_rng(self._jitter_seed(seed, idx))
+            # Dimension-normalize the Gaussian perturbation: a raw
+            # standard_normal(dim) vector has expected norm ~sqrt(dim), so the
+            # unnormalized jitter grew with dimensionality and could push
+            # same-identity cosine below the clustering threshold. Scaling by
+            # 1/sqrt(dim) makes ||jitter_term|| ~= self.jitter regardless of
+            # dim, bounding the angular deviation so repeated observations of
+            # one identity stay tightly clustered (cos > 0.9) while different
+            # identities remain near-orthogonal.
+            noise = rng.standard_normal(self.dim) / np.sqrt(self.dim)
+            base = _unit(base + self.jitter * noise)
         return base.tolist()
 
 

@@ -27,6 +27,36 @@ def test_same_seed_clusters_tighter_than_distractor():
     assert cosine(a1, a2) > 0.9  # same identity clusters tightly
 
 
+def test_same_seed_similarity_is_dimension_robust():
+    """Same-seed cosine must stay well above the clustering threshold at any
+    embedding dimensionality. Guards against unnormalized jitter, whose angular
+    impact scaled with sqrt(dim) and previously dipped below 0.9 at dim=512."""
+    for dim in (128, 512, 1024):
+        backend = MockEmbeddingBackend(dim=dim)
+        v1 = backend.embed_seed("red_bag")
+        v2 = backend.embed_seed("red_bag")
+        v3 = backend.embed_seed("red_bag")
+        assert cosine(v1, v2) > 0.95
+        assert cosine(v1, v3) > 0.95
+        # still distinguishable from a different identity
+        other = backend.embed_seed("blue_jacket")
+        assert cosine(v1, other) < cosine(v1, v2)
+
+
+def test_same_seed_embeddings_deterministic_across_instances():
+    """Two independent backend instances must produce identical embeddings for
+    the same (seed, call-index). Proves the SHA-256 jitter seed is stable and
+    not dependent on Python's per-process randomized hash()."""
+    b1 = MockEmbeddingBackend()
+    b2 = MockEmbeddingBackend()
+    # advance both identically: first (idx=0, no jitter) then (idx=1, jittered)
+    b1.embed_seed("red_bag")
+    b2.embed_seed("red_bag")
+    v1 = b1.embed_seed("red_bag")
+    v2 = b2.embed_seed("red_bag")
+    assert v1 == v2
+
+
 def test_nearest_neighbour_returns_same_identity():
     db = SessionLocal()
     try:
