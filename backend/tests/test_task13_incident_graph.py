@@ -259,7 +259,8 @@ def test_timeline_reconstruction_from_graph():
         # every item retains event id, camera, ts, zones, evidence ref
         for item in tl:
             assert item["event_id"] and item["camera_id"] and item["ts"] is not None
-        assert any(t["evidence"].get("clip_url") for t in tl)
+        assert all(t["evidence"]["clip_url"] is None for t in tl)
+        assert all(t["evidence"]["clip_status"] == "not-requested" for t in tl)
     finally:
         db.close()
 

@@ -7,6 +7,7 @@ path so downstream stages always read consistent rows.
 from __future__ import annotations
 
 import json
+import time
 
 from sqlalchemy.orm import Session
 
@@ -43,19 +44,50 @@ def _to_row(evt: CanonicalEvent) -> Event:
     )
 
 
-def ingest_event(db: Session, evt: CanonicalEvent) -> Event:
+def ingest_event(db: Session, evt: CanonicalEvent, enqueue_pipeline: bool = True,
+                 enqueue_evidence: bool = True) -> Event:
+    from sqlalchemy import select
+    from app.processing.jobs import digest, enqueue, insert_once
+    scope = db.info["scope"]
+    if evt.tenant_id not in (None, scope.tenant) or evt.site_id not in (None, scope.site):
+        raise PermissionError("event scope mismatch")
+    payload = evt.model_dump(mode="json", exclude={"event_id", "tenant_id", "site_id"})
+    payload_hash = digest(payload)
+    revision = evt.source.revision or str(evt.time.observed)
+    key = digest([scope.tenant, scope.site, evt.source.type.value, evt.source.instance,
+                  evt.source.source_event_id, evt.camera_id, revision,
+                  evt.source.event_kind, evt.event_type.value])
     row = _to_row(evt)
-    db.add(row)
+    values = {c.name: getattr(row, c.name) for c in Event.__table__.columns
+              if c.name not in {"created_at", "schema_version"}}
+    values.update(id=key, dedup_key=key, tenant_id=scope.tenant, site_id=scope.site,
+                  source_instance=evt.source.instance, source_revision=revision,
+                  event_kind=evt.source.event_kind, payload_digest=payload_hash,
+                  received_at=time.time(), schema_version=evt.schema_version)
+    from app.config import get_settings
+    if get_settings().pilot_mode:
+        # Keep provenance, not optional identity attributes or full raw payloads.
+        values.update(raw_json=None, sub_label=None)
+    insert_once(db, Event, values, key="dedup_key")
+    existing = db.scalar(select(Event).where(Event.dedup_key == key))
+    if existing is None or existing.payload_digest != payload_hash:
+        db.rollback()
+        raise ValueError("conflicting source revision")
+    if enqueue_pipeline:
+        enqueue(db, "pipeline", key, {"event_id": existing.id})
+    from app.evidence.capture import request_capture
+    if not get_settings().pilot_mode:
+        request_capture(db, existing, enqueue_job=enqueue_evidence)
     db.commit()
-    db.refresh(row)
-    return row
+    return existing
 
 
-def ingest_source(db: Session, source: EventSource, limit: int | None = None) -> int:
+def ingest_source(db: Session, source: EventSource, limit: int | None = None,
+                  enqueue_pipeline: bool = True, enqueue_evidence: bool = True) -> int:
     """Drain a source into the DB. Returns number of events ingested."""
     count = 0
     for evt in source.stream():
-        ingest_event(db, evt)
+        ingest_event(db, evt, enqueue_pipeline=enqueue_pipeline, enqueue_evidence=enqueue_evidence)
         count += 1
         if limit is not None and count >= limit:
             break
@@ -82,6 +114,11 @@ def seed_embeddings(db: Session) -> int:
         if key in seen:
             continue
         seen.add(key)
+        from app.models.entities import TrackEmbedding
+        if db.scalar(_select(TrackEmbedding.id).where(
+                TrackEmbedding.camera_id == e.camera_id,
+                TrackEmbedding.track_local_id == e.track_local_id).limit(1)):
+            continue
         seed = e.sub_label or e.label or "unknown"
         add_embedding(db, e.camera_id, e.track_local_id, seed=seed, event_id=e.id)
         made += 1

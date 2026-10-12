@@ -1,0 +1,11 @@
+{
+  "operations_lead": "",
+  "signed_reference": "",
+  "conditions": ["day", "night", "partial_occlusion"],
+  "min_repetitions_per_condition": null,
+  "detection_rate_min": null,
+  "p95_alert_seconds_max": null,
+  "p95_acknowledgement_seconds_max": null,
+  "false_alerts_per_camera_hour_max": null,
+  "min_monitored_camera_hours": null
+}

@@ -77,6 +77,20 @@ def test_single_migration_head():
     assert len(heads) == 1, f"expected single head, got {heads}"
 
 
+def test_pilot_columns_match_migrations(tmp_path):
+    from alembic import command
+    path = tmp_path / "pilot-schema.db"
+    url = f"sqlite:///{path}"
+    command.upgrade(_alembic_cfg(url), "head")
+    eng = create_engine(url)
+    try:
+        inspector = inspect(eng)
+        for name in ("incident", "pilot_rule", "pilot_case", "pilot_notice", "pilot_contact", "pilot_maintenance"):
+            assert {column["name"] for column in inspector.get_columns(name)} == set(Base.metadata.tables[name].columns.keys())
+    finally:
+        eng.dispose()
+
+
 def test_migration_chain_is_reversible():
     """upgrade head then downgrade base leaves no application tables."""
     from alembic import command

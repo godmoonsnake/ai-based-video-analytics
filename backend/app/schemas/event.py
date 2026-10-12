@@ -28,6 +28,9 @@ class SourceType(str, Enum):
 class EventSourceRef(BaseModel):
     type: SourceType
     source_event_id: str | None = None
+    instance: str = "default"
+    revision: str | None = None
+    event_kind: str = "observation"
 
 
 class EventTrack(BaseModel):
@@ -56,6 +59,10 @@ class EventEvidence(BaseModel):
 
 
 class CanonicalEvent(BaseModel):
+    model_config = {"allow_inf_nan": False}
+    schema_version: int = 1
+    tenant_id: str | None = None
+    site_id: str | None = None
     event_id: str
     source: EventSourceRef
     camera_id: str

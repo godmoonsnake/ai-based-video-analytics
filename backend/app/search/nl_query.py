@@ -117,4 +117,9 @@ def parse_nl(db: Session, query: str) -> SearchFilter:
         except Exception:  # pragma: no cover - never let LLM break search
             pass
 
+    # An unrecognized phrase must not silently become an unfiltered site-wide
+    # search and present every case as if it matched the user's words.
+    if not f.to_dict() and query.strip():
+        f.text = query.strip()
+
     return f

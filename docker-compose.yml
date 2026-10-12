@@ -90,6 +90,10 @@ services:
       DARSON_FRIGATE_API_BASE: http://frigate:5000
       # Browser-facing evidence base: relative, routed by the proxy to Frigate.
       DARSON_FRIGATE_PUBLIC_BASE: /frigate
+      DARSON_EVIDENCE_ROOT: /app/var/evidence
+      DARSON_SPOOL_ROOT: /app/var/spool
+    volumes:
+      - darson_state:/app/var
     ports:
       - "8000:8000"
     healthcheck:
@@ -99,11 +103,67 @@ services:
       retries: 12
       start_period: 20s
 
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.processing.worker"]
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DARSON_DATABASE_URL: postgresql+psycopg2://darson:darson@db:5432/darson
+      DARSON_ENVIRONMENT: development
+      DARSON_WORKER_TENANT: development
+      DARSON_WORKER_SITE: site_a
+      DARSON_EVIDENCE_ROOT: /app/var/evidence
+      DARSON_SPOOL_ROOT: /app/var/spool
+    volumes:
+      - darson_state:/app/var
+
+  health-worker:
+    build: ./backend
+    command: ["python", "-m", "app.processing.worker", "health"]
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      frigate: { condition: service_healthy }
+    environment:
+      DARSON_DATABASE_URL: postgresql+psycopg2://darson:darson@db:5432/darson
+      DARSON_ENVIRONMENT: development
+      DARSON_WORKER_TENANT: development
+      DARSON_WORKER_SITE: site_a
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+    volumes:
+      - darson_state:/app/var
+
+  connector:
+    build: ./backend
+    command: ["python", "-m", "app.processing.worker", "connector"]
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+    environment:
+      DARSON_DATABASE_URL: postgresql+psycopg2://darson:darson@db:5432/darson
+      DARSON_ENVIRONMENT: development
+      DARSON_WORKER_TENANT: development
+      DARSON_WORKER_SITE: site_a
+      DARSON_SOURCE_INSTANCE: frigate-local
+      DARSON_FRIGATE_MQTT_HOST: mosquitto
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+      DARSON_SPOOL_ROOT: /app/var/spool
+    volumes:
+      - darson_state:/app/var
+
   frontend:
     build: ./frontend
     depends_on:
       backend:
         condition: service_healthy
+    volumes:
+      # Synthetic demo evidence (scripts/generate_mock_evidence.py): the mock
+      # event source fabricates /mock-evidence/<camera>/<track>/... URLs; this
+      # mount lets the frontend nginx serve them at the same origin.
+      - ./deploy/mock-evidence:/usr/share/nginx/html/mock-evidence:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/healthz || exit 1"]
       interval: 10s
@@ -134,3 +194,4 @@ services:
 volumes:
   db_data:
   frigate_media:
+  darson_state:

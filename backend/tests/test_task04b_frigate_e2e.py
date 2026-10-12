@@ -83,19 +83,16 @@ def test_frigate_events_ingest_through_pipeline_direct():
             "gate_3", "corridor_1", "restricted_2", "exit_4"
         }
 
-        # INCIDENT: a chronological cross-camera timeline is reconstructed with
-        # Frigate evidence URLs attached (traceability Incident->Event->Evidence).
+        # INCIDENT: the timeline carries evidence state without leaking Frigate URLs.
         ids = build_incidents(db)
         assert len(ids) == 1
         timeline = reconstruct_timeline(db, ids[0])
         assert [t["camera_id"] for t in timeline] == [
             "gate_3", "corridor_1", "restricted_2", "exit_4"
         ]
-        assert any(
-            t["evidence"].get("clip_url", "").startswith("http")
-            and "/api/events/" in t["evidence"]["clip_url"]
-            for t in timeline
-        )
+        assert all(t["evidence"]["media_origin"] == "source" for t in timeline)
+        assert all(t["evidence"]["clip_status"] == "requested" for t in timeline)
+        assert all(t["evidence"]["clip_url"] is None for t in timeline)
     finally:
         db.close()
 

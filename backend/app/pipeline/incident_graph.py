@@ -407,8 +407,24 @@ def graph_timeline(db: Session, incident_id: int) -> list[dict]:
     ).scalars().all()
 
     items = []
+    from app.models.evidence import EvidenceObject
+    event_ids = [n.ref_id for n in event_nodes]
+    evidence_rows = db.scalars(select(EvidenceObject).where(EvidenceObject.event_id.in_(event_ids))).all() if event_ids else []
+    evidence_by_event = {}
+    for item in evidence_rows:
+        evidence_by_event.setdefault(item.event_id, {})[item.kind] = item
     for n in event_nodes:
         a = n.attributes or {}
+        records = evidence_by_event.get(n.ref_id, {})
+        snapshot, clip = records.get("snapshot"), records.get("clip")
+        aev = {"snapshot_url": f"/api/v1/evidence/{snapshot.id}/content" if snapshot and snapshot.status == "available" else None,
+               "clip_url": f"/api/v1/evidence/{clip.id}/content" if clip and clip.status == "available" else None,
+               "snapshot_status": snapshot.status if snapshot else "not-requested",
+               "clip_status": clip.status if clip else "not-requested"}
+        # Mock assets use the same authorized evidence vault as live sources;
+        # an unavailable synthetic asset must not become a broken media URL.
+        event = db.get(Event, n.ref_id)
+        aev["media_origin"] = "synthetic" if event and event.source_type == "mock" else "source"
         items.append({
             "event_id": n.ref_id,
             "ts": a.get("ts"),
@@ -417,7 +433,7 @@ def graph_timeline(db: Session, incident_id: int) -> list[dict]:
             "event_type": a.get("event_type"),
             "zones": a.get("zones", []),
             "zone_kinds": a.get("zone_kinds", []),
-            "evidence": a.get("evidence_ref", {}),
+            "evidence": aev,
         })
     items.sort(key=lambda i: (i["ts"] is None, i["ts"]))
     return items
@@ -439,7 +455,7 @@ def graph_as_dict(db: Session, incident_id: int) -> dict:
                 "id": n.id,
                 "type": n.node_type,
                 "ref_id": n.ref_id,
-                "attributes": n.attributes or {},
+                "attributes": {k: v for k, v in (n.attributes or {}).items() if k != "evidence_ref"},
             }
             for n in nodes
         ],

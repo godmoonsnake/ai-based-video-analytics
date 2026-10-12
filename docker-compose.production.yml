@@ -1,0 +1,174 @@
+# Restricted single-host pilot composition. Place behind an authenticated TLS
+# ingress and supply secrets through the deployment environment/secret manager.
+x-pilot-environment: &pilot_environment
+  DARSON_PILOT_MODE: "true"
+  DARSON_EVENT_SOURCE: frigate
+  DARSON_FRIGATE_EMIT_UPDATES: "true"
+  DARSON_PILOT_DATA_AGREEMENT_REF: ${DARSON_PILOT_DATA_AGREEMENT_REF:?set the signed data/retention agreement reference}
+  DARSON_PILOT_SUPERVISOR_SUBJECT: ${DARSON_PILOT_SUPERVISOR_SUBJECT:?set supervisor IdP subject}
+  DARSON_NOTIFICATION_PROVIDER: ${DARSON_NOTIFICATION_PROVIDER:?choose telegram or whatsapp}
+  DARSON_TELEGRAM_BOT_TOKEN: ${DARSON_TELEGRAM_BOT_TOKEN:-}
+  DARSON_WHATSAPP_ACCESS_TOKEN: ${DARSON_WHATSAPP_ACCESS_TOKEN:-}
+  DARSON_WHATSAPP_PHONE_NUMBER_ID: ${DARSON_WHATSAPP_PHONE_NUMBER_ID:-}
+  DARSON_WHATSAPP_TEMPLATE_NAME: ${DARSON_WHATSAPP_TEMPLATE_NAME:-}
+  DARSON_WHATSAPP_API_VERSION: ${DARSON_WHATSAPP_API_VERSION:-}
+  DARSON_EVIDENCE_RETENTION_DAYS: ${DARSON_EVIDENCE_RETENTION_DAYS:?set agreed evidence retention days}
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_OIDC_ISSUER: ${DARSON_AUTH_ISSUER:?set OIDC issuer}
+        VITE_OIDC_CLIENT_ID: ${DARSON_OIDC_CLIENT_ID:?set public SPA client ID}
+    networks: !override [default]
+  db:
+    networks: !override [database]
+    ports: !reset []
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      DARSON_MIGRATION_DB_PASSWORD: ${DARSON_MIGRATION_DB_PASSWORD:?set migration role password}
+      DARSON_RUNTIME_DB_PASSWORD: ${DARSON_RUNTIME_DB_PASSWORD:?set runtime role password}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sql:/docker-entrypoint-initdb.d/01-darson-roles.sql:ro
+  migration:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    networks: !override [database]
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DARSON_ENVIRONMENT: production
+      DARSON_DATABASE_URL: ${DARSON_MIGRATION_DATABASE_URL:?set schema-owner migration URL}
+  mosquitto:
+    networks: !override [source_plane]
+    ports: !reset []
+    environment:
+      DARSON_MQTT_PASSWORD: ${DARSON_MQTT_PASSWORD:?set DARSON_MQTT_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -u darson -P \"$$DARSON_MQTT_PASSWORD\" -t '$$SYS/#' -C 1 -W 4"]
+    volumes:
+      - ./deploy/production-mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ${DARSON_MQTT_PASSWORD_FILE:?set path to protected Mosquitto password file}:/mosquitto/config/passwd:ro
+      - ${DARSON_MQTT_ACL_FILE:?set path to protected Mosquitto ACL file}:/mosquitto/config/acl:ro
+  frigate:
+    image: ${DARSON_FRIGATE_IMAGE:?set a tested Frigate version tag or digest}
+    networks: !override [source_plane, camera_access]
+    ports: !reset []
+    volumes:
+      - ${DARSON_FRIGATE_CONFIG_FILE:?set path to protected Frigate config with credentials}:/config/config.yml:ro
+  backend:
+    networks: !override [default, database, source_plane]
+    depends_on:
+      migration: { condition: service_completed_successfully }
+    environment:
+      <<: *pilot_environment
+      DARSON_ENVIRONMENT: production
+      DARSON_AUTH_MODE: oidc
+      DARSON_EVENT_SOURCE: frigate
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+      DARSON_FRIGATE_MQTT_HOST: mosquitto
+      DARSON_MQTT_USERNAME: darson
+      DARSON_MQTT_PASSWORD: ${DARSON_MQTT_PASSWORD:?set DARSON_MQTT_PASSWORD}
+      DARSON_EVIDENCE_KEY: ${DARSON_EVIDENCE_KEY:?set 32-byte evidence key}
+      DARSON_SPOOL_KEY: ${DARSON_SPOOL_KEY:?set spool key}
+      DARSON_OIDC_ISSUER: ${DARSON_AUTH_ISSUER:?set OIDC issuer}
+      DARSON_OIDC_AUDIENCE: ${DARSON_AUTH_AUDIENCE:?set OIDC audience}
+      DARSON_OIDC_JWKS_URL: ${DARSON_AUTH_JWKS_URL:?set HTTPS JWKS URL}
+      DARSON_DATABASE_URL: ${DARSON_RUNTIME_DATABASE_URL:?set restricted runtime URL}
+      DARSON_FRIGATE_PUBLIC_BASE: ""
+      DARSON_EVIDENCE_ROOT: /var/lib/darson/evidence
+      DARSON_FRIGATE_API_TOKEN: ${DARSON_FRIGATE_API_TOKEN:?set scoped Frigate API token}
+    ports: !reset []
+    volumes:
+      - darson_evidence:/var/lib/darson/evidence
+      - darson_spool:/var/lib/darson/spool
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.processing.worker"]
+    restart: unless-stopped
+    networks: !override [database, source_plane, notification_egress]
+    depends_on:
+      db: { condition: service_healthy }
+      migration: { condition: service_completed_successfully }
+    environment:
+      <<: *pilot_environment
+      DARSON_ENVIRONMENT: production
+      DARSON_DATABASE_URL: ${DARSON_RUNTIME_DATABASE_URL:?set restricted runtime URL}
+      DARSON_AUTH_MODE: oidc
+      DARSON_WORKER_TENANT: ${DARSON_WORKER_TENANT:?set tenant}
+      DARSON_WORKER_SITE: ${DARSON_WORKER_SITE:?set site}
+      DARSON_EVIDENCE_KEY: ${DARSON_EVIDENCE_KEY:?set key}
+      DARSON_EVIDENCE_ROOT: /var/lib/darson/evidence
+      DARSON_SPOOL_ROOT: /var/lib/darson/spool
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+      DARSON_FRIGATE_API_TOKEN: ${DARSON_FRIGATE_API_TOKEN:?set scoped Frigate API token}
+  connector:
+    build: ./backend
+    command: ["python", "-m", "app.processing.worker", "connector"]
+    restart: unless-stopped
+    networks: !override [database, source_plane]
+    depends_on:
+      db: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+      migration: { condition: service_completed_successfully }
+    environment:
+      <<: *pilot_environment
+      DARSON_ENVIRONMENT: production
+      DARSON_DATABASE_URL: ${DARSON_RUNTIME_DATABASE_URL:?set restricted runtime URL}
+      DARSON_AUTH_MODE: oidc
+      DARSON_WORKER_TENANT: ${DARSON_WORKER_TENANT:?set tenant}
+      DARSON_WORKER_SITE: ${DARSON_WORKER_SITE:?set site}
+      DARSON_SOURCE_INSTANCE: ${DARSON_SOURCE_INSTANCE:?set source identity}
+      DARSON_MQTT_USERNAME: darson
+      DARSON_MQTT_PASSWORD: ${DARSON_MQTT_PASSWORD:?set password}
+      DARSON_FRIGATE_MQTT_HOST: mosquitto
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+      DARSON_SPOOL_KEY: ${DARSON_SPOOL_KEY:?set key}
+      DARSON_SPOOL_ROOT: /var/lib/darson/spool
+    volumes:
+      - darson_spool:/var/lib/darson/spool
+  health-worker:
+    build: ./backend
+    command: ["python", "-m", "app.processing.worker", "health"]
+    restart: unless-stopped
+    networks: !override [database, source_plane]
+    depends_on:
+      db: { condition: service_healthy }
+      frigate: { condition: service_healthy }
+      migration: { condition: service_completed_successfully }
+    environment:
+      <<: *pilot_environment
+      DARSON_ENVIRONMENT: production
+      DARSON_AUTH_MODE: oidc
+      DARSON_DATABASE_URL: ${DARSON_RUNTIME_DATABASE_URL:?set runtime URL}
+      DARSON_WORKER_TENANT: ${DARSON_WORKER_TENANT:?set tenant}
+      DARSON_WORKER_SITE: ${DARSON_WORKER_SITE:?set site}
+      DARSON_FRIGATE_API_BASE: http://frigate:5000
+      DARSON_FRIGATE_API_TOKEN: ${DARSON_FRIGATE_API_TOKEN:?set scoped Frigate API token}
+  proxy:
+    networks: !override [default]
+    volumes:
+      - ./deploy/proxy.production.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: !reset []
+    ports: !override
+      - "127.0.0.1:8080:80"
+
+volumes:
+  darson_evidence:
+  darson_spool:
+
+networks:
+  default:
+    name: darson_app
+  database:
+    internal: true
+  source_plane:
+    internal: true
+  camera_access:
+    internal: false
+  notification_egress:
+    internal: false

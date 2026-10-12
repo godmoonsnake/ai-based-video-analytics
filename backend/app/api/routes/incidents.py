@@ -103,16 +103,24 @@ class FeedbackIn(BaseModel):
 def submit_feedback(incident_id: int, body: FeedbackIn,
                     db: Session = Depends(get_db)) -> dict:
     """Lightweight human-in-the-loop feedback (no RBAC)."""
+    from app.config import get_settings
+    from app.security.auth import require_role, REVIEW_ROLES
+    scope = require_role(db, REVIEW_ROLES)
+    if get_settings().environment == "production":
+        raise HTTPException(409, "use the versioned /api/v1/incidents/{id}/state endpoint")
     inc = db.get(Incident, incident_id)
     if inc is None:
         raise HTTPException(status_code=404, detail="incident not found")
 
     db.add(OperatorFeedback(incident_id=incident_id, action=body.action, note=body.note))
+    from app.models.pilot import PilotCase
+    if db.scalar(select(PilotCase.id).where(PilotCase.incident_id == incident_id)):
+        raise HTTPException(409, "use the guard desk outcome for this pilot task")
     if body.action == "confirm":
         inc.status = "confirmed"
     elif body.action == "dismiss":
         inc.status = "dismissed"
-    db.add(AuditLog(actor="operator", action=f"feedback:{body.action}",
+    db.add(AuditLog(actor=scope.actor, action=f"feedback:{body.action}",
                     target=f"incident:{incident_id}"))
     db.commit()
     return {"incident_id": incident_id, "status": inc.status}

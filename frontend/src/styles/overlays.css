@@ -1,0 +1,390 @@
+/* ============================================================
+   Overlays: states (radar/empty/error), toasts, modals, help
+   ============================================================ */
+
+/* ---------------- Loading radar ---------------- */
+
+.radar {
+  position: relative;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle, rgba(67, 224, 160, 0.06), transparent 70%);
+}
+.radar::before {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+.radar::after {
+  content: "";
+  position: absolute;
+  inset: 36%;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+}
+.radar .sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(67, 224, 160, 0.35), transparent 70deg, transparent);
+  animation: radar-spin 1.8s linear infinite;
+}
+.radar .blip {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 8px rgba(67, 224, 160, 0.8);
+}
+@keyframes radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* full-panel loading */
+.state-block {
+  min-height: 240px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 30px;
+}
+
+.state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.state-sub {
+  max-width: 380px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.8;
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+}
+
+/* error panel */
+.error-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 92, 92, 0.4);
+  border-radius: var(--radius);
+  background: var(--red-soft);
+}
+.error-panel .t {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ff8a8a;
+}
+.error-panel .d {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-dim);
+  word-break: break-word;
+}
+
+/* inline alert (409 etc.) */
+.inline-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px;
+  border: 1px solid rgba(255, 92, 92, 0.4);
+  border-radius: 8px;
+  background: var(--red-soft);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #ff8a8a;
+}
+.inline-alert svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+/* ---------------- Toasts ---------------- */
+
+.toasts {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 340px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line-strong);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: rgba(9, 13, 21, 0.96);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  animation: toast-in 200ms var(--ease);
+}
+.toast.success {
+  border-left-color: var(--mint);
+}
+.toast.success .ticon {
+  color: var(--mint);
+}
+.toast.error {
+  border-left-color: var(--red);
+}
+.toast.error .ticon {
+  color: var(--red);
+}
+.toast.info {
+  border-left-color: var(--blue);
+}
+.toast.info .ticon {
+  color: var(--blue);
+}
+.toast .ticon {
+  flex: none;
+  margin-top: 1px;
+}
+.toast .ticon svg {
+  width: 14px;
+  height: 14px;
+}
+.toast .tmsg {
+  flex: 1;
+  min-width: 0;
+}
+.toast .tmsg b {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  margin-bottom: 1px;
+}
+.toast .x {
+  flex: none;
+  color: var(--ink-faint);
+}
+.toast .x:hover {
+  color: var(--ink);
+}
+.toast .x svg {
+  width: 12px;
+  height: 12px;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* ---------------- Modal ---------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 30px;
+  background: rgba(2, 4, 7, 0.8);
+  backdrop-filter: blur(8px);
+  animation: lb-in 160ms var(--ease);
+}
+
+.modal {
+  width: min(680px, 100%);
+  max-height: 84vh;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #0d1320, #080c13);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  padding: 22px 24px 26px;
+  position: relative;
+}
+.modal .modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+.modal-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.modal-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 18px;
+}
+
+/* pipeline diagram (about modal) */
+.pipe {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 14px 0 18px;
+}
+.pipe .stage {
+  padding: 7px 12px;
+  border: 1px solid var(--mint-line);
+  border-radius: 8px;
+  background: var(--mint-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--mint);
+}
+.pipe .arr {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.modal p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-dim);
+  margin-bottom: 10px;
+}
+.modal p b {
+  color: var(--ink);
+}
+
+.principle {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(6, 10, 16, 0.5);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+  margin-top: 8px;
+}
+.principle svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--mint);
+  margin-top: 2px;
+}
+
+/* ---------------- Help cheatsheet ---------------- */
+
+.help-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 26px;
+}
+.help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.help-row .what {
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+.help-row .keys {
+  display: flex;
+  gap: 4px;
+}
+
+/* ---------------- Empty detail placeholder ---------------- */
+
+.placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  padding: 40px;
+}
+
+.placeholder .mark {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-faint);
+}
+.placeholder .mark svg {
+  width: 40px;
+  height: 40px;
+  opacity: 0.75;
+}
+.placeholder .mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: 18px;
+  transform: rotate(0deg);
+  animation: mark-spin 26s linear infinite;
+}
+@keyframes mark-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.placeholder h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.placeholder .hint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+.placeholder .hint-list .r {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}

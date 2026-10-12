@@ -1,0 +1,13 @@
+\getenv migration_password DARSON_MIGRATION_DB_PASSWORD
+\getenv runtime_password DARSON_RUNTIME_DB_PASSWORD
+CREATE ROLE darson_migrator LOGIN PASSWORD :'migration_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+CREATE ROLE darson_runtime LOGIN PASSWORD :'runtime_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+GRANT CONNECT ON DATABASE darson TO darson_migrator, darson_runtime;
+ALTER SCHEMA public OWNER TO darson_migrator;
+GRANT USAGE, CREATE ON SCHEMA public TO darson_migrator;
+GRANT USAGE ON SCHEMA public TO darson_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE darson_migrator IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO darson_runtime;
+ALTER DEFAULT PRIVILEGES FOR ROLE darson_migrator IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO darson_runtime;
+CREATE EXTENSION IF NOT EXISTS vector;

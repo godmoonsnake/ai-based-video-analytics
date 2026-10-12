@@ -56,8 +56,9 @@ def test_incident_spans_all_cameras_ordered_with_evidence():
     # timeline ordered across cameras
     cam_order = [t["camera_id"] for t in detail["timeline"]]
     assert cam_order == ["gate_3", "corridor_1", "restricted_2", "exit_4"]
-    # evidence clip URLs present
-    assert any(t["evidence"].get("clip_url") for t in detail["timeline"])
+    # Raw source paths are withheld until media reaches the authorized vault.
+    assert all(t["evidence"]["clip_url"] is None for t in detail["timeline"])
+    assert all(t["evidence"]["clip_status"] == "requested" for t in detail["timeline"])
     # trigger role assigned to the restricted dwell
     trigger_nodes = [n for n in detail["graph"]["nodes"] if n["role"] == "trigger"]
     assert len(trigger_nodes) == 1

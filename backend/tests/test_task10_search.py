@@ -52,6 +52,8 @@ def test_structured_search_endpoint():
     assert body["human_review_required"] is True
     assert len(body["events"]) == 1
     assert body["events"][0]["camera_id"] == "restricted_2"
+    assert body["events"][0]["evidence"]["clip"]["content_url"] is None
+    assert "/mock-evidence/" not in resp.text
 
 
 def test_nl_search_endpoint_returns_matches():

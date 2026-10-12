@@ -22,6 +22,10 @@ def _comparable(evt: CanonicalEvent) -> dict:
     d.pop("raw_json")
     d["source"].pop("type")
     d["source"].pop("source_event_id")
+    # Provenance added by the durable ingestion envelope is deliberately
+    # source-specific while the canonical observation shape remains stable.
+    for key in ("instance", "event_kind", "revision"):
+        d["source"].pop(key, None)
     # Evidence URLs are source-specific; compare only the boolean flags.
     d["evidence"].pop("snapshot_url")
     d["evidence"].pop("clip_url")

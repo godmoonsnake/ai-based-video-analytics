@@ -9,11 +9,19 @@ export type LifecycleAction = "start_triage" | "confirm" | "dismiss" | "reopen";
 export interface EvidenceRef {
   snapshot_url?: string | null;
   clip_url?: string | null;
+  snapshot_status?: string;
+  clip_status?: string;
+  media_origin?: "synthetic" | "source";
 }
 
 export interface IncidentSummary {
   id: number;
+  site_id?: string;
+  track_kind?: string;
+  version?: number;
   status: string;
+  category?: string;
+  pilot_task_id?: string | null;
   priority: string | null;
   confidence: number | null;
   confidence_band: ConfidenceBand;
@@ -75,6 +83,22 @@ export interface IncidentDetail extends IncidentSummary {
   tracks: string[];
   events: IncidentEvent[];
   explanation: Explanation;
+  case_study?: {
+    type: string;
+    site: string;
+    zone: string;
+    observed_at: number;
+    source: string;
+    source_instance: string;
+    source_revision: string;
+    decision: string;
+    policy_version: string;
+    policy_ids: string[];
+    reason: string;
+    detector_confidence: number | null;
+    evidence_status: Record<string, string>;
+    synthetic: boolean;
+  };
 }
 
 export interface TimelineStep {

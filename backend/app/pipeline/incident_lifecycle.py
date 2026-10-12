@@ -25,6 +25,7 @@ not a personal identity. No PII is required or stored beyond that optional label
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
+from sqlalchemy import update
 
 from app.models.entities import AuditLog, Incident, IncidentStateTransition
 
@@ -59,6 +60,8 @@ def apply_transition(
     action: str,
     reviewer: str | None = None,
     note: str | None = None,
+    expected_version: int | None = None,
+    commit: bool = True,
 ) -> IncidentStateTransition:
     """Apply a lifecycle action to an incident, validating and recording it.
 
@@ -66,6 +69,10 @@ def apply_transition(
     no state change) if the action is unknown or not allowed from the current
     state. Does not touch the incident graph/evidence.
     """
+    from sqlalchemy import select
+    from app.models.pilot import PilotCase
+    if db.scalar(select(PilotCase.id).where(PilotCase.incident_id == incident.id)):
+        raise InvalidTransition("use the guard desk outcome for this pilot task")
     if action not in TRANSITIONS:
         raise InvalidTransition(
             f"unknown action '{action}'; valid actions: {sorted(TRANSITIONS)}"
@@ -78,6 +85,14 @@ def apply_transition(
             f"allowed from {list(froms)} (actions available now: {allowed_actions(current)})"
         )
 
+    version = incident.version if expected_version is None else expected_version
+    if version != incident.version:
+        raise InvalidTransition("stale incident version")
+    changed = db.execute(update(Incident).where(Incident.id == incident.id,
+        Incident.version == version, Incident.status == current).values(status=to_state, version=version + 1))
+    if changed.rowcount != 1:
+        db.rollback()
+        raise InvalidTransition("stale incident version")
     transition = IncidentStateTransition(
         incident_id=incident.id,
         from_state=current,
@@ -86,14 +101,16 @@ def apply_transition(
         reviewer=reviewer,
         note=note,
     )
-    incident.status = to_state  # status change only; graph/evidence untouched
     db.add(transition)
     db.add(AuditLog(
         actor=reviewer or "operator",
         action=f"lifecycle:{action}",
         target=f"incident:{incident.id}",
     ))
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(transition)
     return transition
 

@@ -17,8 +17,9 @@ Human-in-the-loop: incidents start `open`; no autonomous verdict is issued.
 from __future__ import annotations
 
 import json
+import time
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models.entities import (
@@ -57,6 +58,8 @@ def find_triggers(db: Session) -> list[Event]:
     dwell_by_key: dict[tuple[str, str], Event] = {}
     entry_by_key: dict[tuple[str, str], Event] = {}
     for e in db.execute(select(Event)).scalars().all():
+        if e.label != "person":
+            continue
         if "restricted" not in _zone_kinds_for_event(e, kind_map):
             continue
         key = (e.camera_id, e.track_local_id)
@@ -74,7 +77,7 @@ def _global_track_for(db: Session, camera_id: str, track_local_id: str) -> Globa
         select(GlobalTrackMember).where(
             GlobalTrackMember.camera_id == camera_id,
             GlobalTrackMember.track_local_id == track_local_id,
-        )
+        ).join(GlobalTrack).where(GlobalTrack.current.is_(True))
     ).scalars().first()
     if member is None:
         return None
@@ -114,9 +117,11 @@ def build_incident_from_trigger(db: Session, trigger: Event) -> Incident:
     kinds_touched = {k for e in events for k in _zone_kinds_for_event(e, kind_map)}
     priority = "medium"
     if "restricted" in kinds_touched:
-        priority = "critical" if seq.anomaly_score >= 0.6 else "high"
+        priority = "high"  # restricted-zone-v1 policy, independent of appearance/anomaly score
 
     incident = Incident(
+        category="restricted_entry",
+        dedup_key=_episode_key(db, trigger.camera_id, trigger.track_local_id),
         status="open",
         start_time=min(e.ts for e in events),
         end_time=max(e.ts for e in events),
@@ -183,6 +188,12 @@ def build_incidents(db: Session) -> list[int]:
     multi-track-aware, correlation-justified grouping the milestone requires —
     incidents are built from connected evidence, not per raw detection.
     """
+    from app.models.lineage import IncidentEpisode
+    from app.processing.jobs import insert_once
+    if db.bind.dialect.name == "postgresql":
+        scope = db.info["scope"]
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:scope))"),
+                   {"scope": f"incidents:{scope.tenant}:{scope.site}"})
     ids: list[int] = []
     seen_global_tracks: set[int] = set()
     for trigger in find_triggers(db):
@@ -191,31 +202,70 @@ def build_incidents(db: Session) -> list[int]:
             if gt.id in seen_global_tracks:
                 continue  # already covered by an incident for this movement
             seen_global_tracks.add(gt.id)
-        inc = build_incident_from_trigger(db, trigger)
+        events = _events_for_global_track(db, gt.id) if gt else [trigger]
+        keys = {_episode_key(db, e.camera_id, e.track_local_id) for e in events}
+        existing = set(db.scalars(select(IncidentEpisode.incident_id).where(IncidentEpisode.id.in_(keys))))
+        direct = db.scalar(select(Incident).where(Incident.dedup_key == _episode_key(
+            db, trigger.camera_id, trigger.track_local_id)))
+        if direct:
+            existing.add(direct.id)
+        # Adopt a historical incident by its immutable event references, not a changing GT ID.
+        legacy = set(db.scalars(select(IncidentEvent.incident_id).where(
+            IncidentEvent.event_id.in_([e.id for e in events]))))
+        existing.update(legacy)
+        if len(existing) > 1:
+            # Never silently merge two operational cases when new inference links them.
+            for identifier in sorted(existing):
+                _record_version(db, db.get(Incident, identifier), events, gt, True)
+                ids.append(identifier)
+            db.commit()
+            continue
+        inc = db.get(Incident, next(iter(existing))) if existing else build_incident_from_trigger(db, trigger)
+        scope = db.info["scope"]
+        for key in keys:
+            insert_once(db, IncidentEpisode, dict(id=key, incident_id=inc.id,
+                        tenant_id=scope.tenant, site_id=scope.site))
+        _record_version(db, inc, events, gt, bool(existing))
+        from app.evidence.capture import attach_evidence
+        attach_evidence(db, inc.id, [e.id for e in events])
+        db.commit()
         ids.append(inc.id)
-    return ids
+    return sorted(set(ids))
+
+
+def _episode_key(db, camera, track):
+    from app.processing.jobs import digest
+    scope = db.info["scope"]
+    return digest([scope.tenant, scope.site, "restricted-zone-v1", camera, track])
+
+
+def _record_version(db, incident, events, gt, proposed):
+    from app.models.lineage import IncidentVersion
+    from app.processing.jobs import digest
+    from app.pipeline.incident_graph import graph_as_dict, graph_timeline
+    identifier = digest([incident.id, sorted(e.id for e in events), gt.run_id if gt else None])
+    if db.get(IncidentVersion, identifier):
+        return
+    # Case lineage and response concurrency share the monotonic incident version:
+    # newly inferred material invalidates stale operator/export snapshots.
+    if proposed:
+        incident.version = (incident.version or 1) + 1
+    db.add(IncidentVersion(id=identifier, incident_id=incident.id, created_at=time.time(),
+        requires_review=proposed, snapshot={
+            "incident_id": incident.id, "case_version": incident.version,
+            "review_state": incident.status, "priority": incident.priority,
+            "priority_policy": "restricted-zone-v1", "priority_reason": "restricted zone observation",
+            "event_ids": sorted(e.id for e in events), "run_id": gt.run_id if gt else None,
+            "proposed_track_id": gt.id if gt else None, "graph": graph_as_dict(db, incident.id),
+            "timeline": graph_timeline(db, incident.id),
+            "correlation_score": gt.confidence if gt else None, "score_is_probability": False,
+            "track_kind": "correlated_movement" if len({e.camera_id for e in events}) > 1 else "single_camera",
+            "detector_confidences": {e.id: e.confidence for e in events},
+            "note": "New inference requires review; completed case graph and decisions are preserved."
+                    if proposed else "Initial case snapshot."}))
 
 
 def reconstruct_timeline(db: Session, incident_id: int) -> list[dict]:
     """Chronological cross-camera timeline with evidence refs."""
-    ie_rows = db.execute(
-        select(IncidentEvent).where(IncidentEvent.incident_id == incident_id)
-    ).scalars().all()
-    role_by_event = {r.event_id: r.role for r in ie_rows}
-    events = [db.get(Event, r.event_id) for r in ie_rows]
-    events = [e for e in events if e is not None]
-    events.sort(key=lambda e: e.ts)
-
-    timeline = []
-    for e in events:
-        evidence = json.loads(e.evidence_ref_json) if e.evidence_ref_json else {}
-        timeline.append({
-            "event_id": e.id,
-            "camera_id": e.camera_id,
-            "event_type": e.event_type,
-            "ts": e.ts,
-            "zones": json.loads(e.zones_json) if e.zones_json else [],
-            "role": role_by_event.get(e.id),
-            "evidence": evidence,
-        })
-    return timeline
+    from app.pipeline.incident_graph import graph_timeline
+    return graph_timeline(db, incident_id)

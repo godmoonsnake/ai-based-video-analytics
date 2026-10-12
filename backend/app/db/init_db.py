@@ -65,6 +65,19 @@ def init_db() -> None:
     """Initialize the database schema per the explicit bootstrap policy."""
     is_pg = engine.dialect.name == "postgresql"
     mode = _bootstrap_mode()
+    from app.config import get_settings
+    if get_settings().environment == "production":
+        # Migrations are a deployment operation under a separate owner credential.
+        if not is_pg or get_settings().auth_mode != "oidc":
+            raise RuntimeError("production requires PostgreSQL and OIDC")
+        with engine.connect() as conn:
+            elevated = conn.scalar(text(
+                "SELECT rolsuper OR rolbypassrls OR EXISTS (SELECT 1 FROM pg_tables "
+                "WHERE schemaname='public' AND tableowner=current_user) "
+                "FROM pg_roles WHERE rolname=current_user"))
+            if elevated:
+                raise RuntimeError("production runtime must not own tables or bypass RLS")
+        return
 
     if is_pg:
         # pgvector must exist before either path creates the vector column.
@@ -76,3 +89,12 @@ def init_db() -> None:
     else:
         # SQLite offline dev/tests (or explicit create_all override).
         Base.metadata.create_all(bind=engine)
+        from sqlalchemy.orm import Session
+        from app.models.security import Tenant, Site
+        with Session(engine) as db:
+            if not db.get(Tenant, "development"):
+                db.add(Tenant(id="development", name="Development — not a customer"))
+                db.flush()
+            if not db.get(Site, ("development", "site_a")):
+                db.add(Site(tenant_id="development", id="site_a", name="Review demo"))
+            db.commit()

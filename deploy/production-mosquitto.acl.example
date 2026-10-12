@@ -1,0 +1,6 @@
+user frigate
+topic write frigate/#
+topic read frigate/#
+
+user darson
+topic read frigate/#

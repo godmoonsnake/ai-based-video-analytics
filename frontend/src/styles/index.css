@@ -1,0 +1,12 @@
+@import "./tokens.css";
+@import "./base.css";
+@import "./console.css";
+@import "./detail.css";
+@import "./views.css";
+@import "./overlays.css";
+@import "./review.css";
+@import "./clinical.css";
+/* OIDC entry gate */
+.auth-gate{min-height:100vh;display:grid;align-content:center;justify-items:center;gap:16px;padding:32px;background:var(--bg,#0b1014);color:var(--ink,#eef3f5);text-align:center}
+.auth-gate p{max-width:520px;color:var(--ink-muted,#9aa9ae)}
+.auth-gate button{border:0;border-radius:8px;padding:12px 20px;background:var(--mint,#43e0a0);color:#07110d;font-weight:700;cursor:pointer}

@@ -3,6 +3,17 @@ __pycache__/
 *.db
 .env
 .venv/
+.venv-local/
+backend/var/local-web*/
+backend/var/local-web.db*
+backend/var/review-*
+backend/var/pytest-*/
+backend/var/pilot-*/
+backend/var/
+docs/implementation-start.patch
+docs/implementation-start-status.txt
+pilot-event-probe.json
+pilot-results.json
 node_modules/
 dist/
 .pytest_cache/

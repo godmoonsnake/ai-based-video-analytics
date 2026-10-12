@@ -32,7 +32,7 @@ def _derive_event_type(zones_current: list[str], zones_entered: list[str], stati
     if stationary or motionless_count >= 30:
         # A long-motionless object is a dwell; loiter is a softer variant.
         return EventType.dwell if motionless_count >= 60 else EventType.loiter
-    if zones_entered:
+    if zones_current:
         return EventType.zone_enter
     return EventType.detection
 
@@ -65,7 +65,11 @@ def normalize_frigate_event(msg: dict[str, Any], api_base: str | None = None) ->
 
     return CanonicalEvent(
         event_id=str(uuid.uuid4()),
-        source=EventSourceRef(type=SourceType.frigate, source_event_id=source_event_id),
+        source=EventSourceRef(type=SourceType.frigate, source_event_id=source_event_id,
+                              instance=_settings.source_instance,
+                              event_kind=msg.get("type", "observation"),
+                              revision=str(after.get("frame_time") or after.get("end_time")
+                                           or after.get("start_time"))),
         camera_id=after.get("camera"),
         track=EventTrack(local_id=source_event_id),
         event_type=_derive_event_type(current_zones, entered_zones, stationary, motionless),
@@ -80,7 +84,9 @@ def normalize_frigate_event(msg: dict[str, Any], api_base: str | None = None) ->
         spatial=EventSpatial(
             bbox=after.get("box"),
             region=after.get("region"),
-            zones=current_zones or entered_zones,
+            # entered_zones is historical. An empty current_zones means the
+            # object is outside every zone, not still inside an earlier zone.
+            zones=current_zones,
             velocity_angle=after.get("velocity_angle"),
             avg_speed=after.get("average_estimated_speed"),
         ),

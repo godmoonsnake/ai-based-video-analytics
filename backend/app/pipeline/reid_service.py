@@ -126,6 +126,11 @@ _backend: EmbeddingBackend | None = None
 def get_backend() -> EmbeddingBackend:
     """Return the active embedding backend (mock by default for the prototype)."""
     global _backend
+    from app.config import get_settings
+    settings = get_settings()
+    if settings.pilot_mode or (settings.environment == "production" and
+                               (_backend is None or isinstance(_backend, MockEmbeddingBackend))):
+        raise RuntimeError("Appearance matching is disabled in the pilot; mock embeddings are demo only")
     if _backend is None:
         _backend = MockEmbeddingBackend()
     return _backend

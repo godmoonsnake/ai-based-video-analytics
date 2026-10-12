@@ -8,6 +8,10 @@
 # Stage 2 (serve): a lightweight nginx serving only the static build output. This
 # container does NOT reverse-proxy the API — the dedicated `proxy` service does.
 FROM node:24-alpine AS build
+ARG VITE_OIDC_ISSUER=""
+ARG VITE_OIDC_CLIENT_ID=""
+ENV VITE_OIDC_ISSUER=$VITE_OIDC_ISSUER
+ENV VITE_OIDC_CLIENT_ID=$VITE_OIDC_CLIENT_ID
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci

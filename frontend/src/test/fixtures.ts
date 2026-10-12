@@ -9,6 +9,7 @@ import type {
 export const summary: IncidentSummary = {
   id: 1,
   status: "open",
+  category: "restricted_entry",
   priority: "high",
   confidence: 0.6,
   confidence_band: "medium",
@@ -16,6 +17,17 @@ export const summary: IncidentSummary = {
   end_time: 1_700_000_120,
   cameras: ["gate_3", "corridor_1", "restricted_2"],
   summary_text: "Track across 3 cameras with restricted dwell.",
+};
+
+export const summaryDismissed: IncidentSummary = {
+  ...summary,
+  id: 2,
+  status: "dismissed",
+  category: "review",
+  priority: "low",
+  confidence: 0.31,
+  confidence_band: "low",
+  summary_text: "Single-camera transit, dismissed by operator.",
 };
 
 export const detail: IncidentDetail = {
@@ -35,8 +47,8 @@ export const detail: IncidentDetail = {
       has_snapshot: true,
       has_clip: true,
       evidence_ref: {
-        snapshot_url: "http://frigate:5000/api/events/evt-a/snapshot.jpg",
-        clip_url: "http://frigate:5000/api/events/evt-a/clip.mp4",
+        snapshot_url: "/mock-evidence/gate_3/a1/snapshot.jpg",
+        clip_url: "/mock-evidence/gate_3/a1/clip.mp4",
       },
     },
     {
@@ -49,7 +61,7 @@ export const detail: IncidentDetail = {
       zone_kinds: ["restricted"],
       has_snapshot: true,
       has_clip: false,
-      evidence_ref: { snapshot_url: "http://frigate:5000/api/events/evt-c/snapshot.jpg", clip_url: null },
+      evidence_ref: { snapshot_url: "/mock-evidence/restricted_2/c3/snapshot.jpg", clip_url: null },
     },
   ],
   explanation: {
@@ -93,7 +105,7 @@ export const timeline: TimelineResponse = {
       event_type: "detection",
       zones: ["entry_zone"],
       zone_kinds: ["entry"],
-      evidence: { snapshot_url: "http://frigate:5000/api/events/evt-a/snapshot.jpg", clip_url: null },
+      evidence: { snapshot_url: "/mock-evidence/gate_3/a1/snapshot.jpg", clip_url: null },
     },
     {
       event_id: "evt-c",
@@ -114,18 +126,51 @@ export const graph: IncidentGraph = {
     { id: 1, type: "incident", ref_id: "1", attributes: {} },
     { id: 2, type: "track", ref_id: "1", attributes: {} },
     { id: 3, type: "camera", ref_id: "gate_3", attributes: {} },
-    { id: 4, type: "event", ref_id: "evt-a", attributes: { event_type: "detection", camera_id: "gate_3", ts: 1_700_000_001 } },
+    {
+      id: 4,
+      type: "event",
+      ref_id: "evt-a",
+      attributes: { event_type: "detection", camera_id: "gate_3", ts: 1_700_000_001 },
+    },
   ],
   edges: [
-    { id: 1, type: "incident_membership", source: { type: "incident", ref_id: "1" }, target: { type: "track", ref_id: "1" }, confidence: null, evidence: {} },
-    { id: 2, type: "event_to_track", source: { type: "event", ref_id: "evt-a" }, target: { type: "track", ref_id: "1" }, confidence: null, evidence: {} },
-    { id: 3, type: "correlation", source: { type: "track", ref_id: "1" }, target: { type: "track", ref_id: "1" }, confidence: 0.745, evidence: { combined_score: 0.745, s_time: 0.25 } },
+    {
+      id: 1,
+      type: "incident_membership",
+      source: { type: "incident", ref_id: "1" },
+      target: { type: "track", ref_id: "1" },
+      confidence: null,
+      evidence: {},
+    },
+    {
+      id: 2,
+      type: "event_to_track",
+      source: { type: "event", ref_id: "evt-a" },
+      target: { type: "track", ref_id: "1" },
+      confidence: null,
+      evidence: {},
+    },
+    {
+      id: 3,
+      type: "correlation",
+      source: { type: "track", ref_id: "1" },
+      target: { type: "track", ref_id: "1" },
+      confidence: 0.745,
+      evidence: { combined_score: 0.745, s_time: 0.25 },
+    },
   ],
 };
 
 export const history: StateHistoryResponse = {
   incident_id: 1,
   history: [
-    { from_state: "open", to_state: "triage", action: "start_triage", reviewer: "operator", note: null, created_at: "2026-09-29T10:00:00" },
+    {
+      from_state: "open",
+      to_state: "triage",
+      action: "start_triage",
+      reviewer: "operator",
+      note: null,
+      created_at: "2026-09-29T10:00:00",
+    },
   ],
 };

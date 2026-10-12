@@ -44,7 +44,8 @@ def test_end_to_end_pipeline():
     assert [t["camera_id"] for t in detail["timeline"]] == [
         "gate_3", "corridor_1", "restricted_2", "exit_4",
     ]
-    assert any(t["evidence"].get("clip_url") for t in detail["timeline"])
+    assert all(t["evidence"]["clip_status"] == "requested" for t in detail["timeline"])
+    assert all(t["evidence"]["clip_url"] is None for t in detail["timeline"])
     assert detail["priority"] in ("high", "critical")
 
     # HISTORY: mine patterns (single run still yields hotspot + locations).

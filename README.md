@@ -1,240 +1,81 @@
-# DARSON Intelligence Layer
+# DARSON single-site pilot
 
-An AI-based video-analytics **intelligence layer that sits ABOVE an existing VMS**
-(e.g. Katomaran, Frigate). It does not replace a VMS. It turns raw
-detections/events into contextual intelligence:
+The active pilot is one camera, one Frigate polygon and a restricted-hours schedule, with a guard task queue, acknowledgement/outcomes, protected incident evidence and guard/supervisor notification routing. See [the pilot runbook](docs/pilot/README.md) for configuration, retention, real-recorder testing, signed acceptance criteria and ML evaluation. Live recorder compatibility, hardware capacity, external phone delivery and offline sign-in remain unverified until tested at the site.
 
+The six case-study and parking prototypes remain experimental and are blocked when `DARSON_PILOT_MODE=true`. They are not proven live detectors or pilot pitch claims. Research demos remain available only outside the pilot; development notifications are suppressed.
+
+The guard UI, pilot backend, migrations and local regression checks are implemented; see [the dated validation record](docs/pilot/validation-2026-10-12.md). Open a safe local example with `powershell -ExecutionPolicy Bypass -File .\scripts\start-pilot-review.ps1` at `http://127.0.0.1:8081`. This uses its own simulated SQLite database and suppresses external messages.
+
+DARSON turns source events into explainable incident cases, supports evidence review and accountable operator response, and provides service-health signals. It is a security decision-support and operational-coordination system. Detection, behaviour and cross-camera correlation results are signals for human review and are not proof of identity, criminal activity or wrongdoing.
+
+## Current implementation
+
+The current uncommitted workspace contains tenant/site-scoped ingestion and processing, correlation lineage and hypotheses, encrypted evidence handling, response/SOP actions, SLA breach records with a local notification adapter, OIDC API authorization and a browser sign-in flow, version-pinned asynchronous PDF/ZIP exports, camera/recording/evidence telemetry, and a restricted production Compose profile. JSON and CSV case exports remain available. Review the exact current gaps in [pilot-gap-audit.md](docs/pilot-gap-audit.md) and [pilot-implementation-gaps.md](docs/pilot-implementation-gaps.md).
+
+The company-review interface and local path have been validated without Docker. The repository's old `.venv` points to a missing Python installation. Docker Desktop is running, but its current image-pull proxy returns an invalid HTTPS response for Docker Hub. This is not a production-readiness claim.
+
+## Development and deterministic demo
+
+Requirements: Python 3.12, Node 20+, and Docker Compose v2 for the full stack. The local API uses the development-only fixed `development/site_a` scope and a supervisor actor; it is not an authentication deployment pattern.
+
+To open the site without Docker on this machine, run `powershell -ExecutionPolicy Bypass -File .\scripts\start-local.ps1` from the repository root. It starts the API and background jobs worker on `127.0.0.1:8000` and the Vite frontend on `127.0.0.1:8080`, using isolated `backend/var/review-demo-v3.db`. Existing local databases are preserved. Open [http://127.0.0.1:8080](http://127.0.0.1:8080), select **Platform overview**, then **Load guided review**. Three synthetic cases are created through the canonical ingest, correlation and incident pipeline. Repeating the action is idempotent. One four-camera case has synthetic media in the protected vault, one has only single-camera context, and one deliberately has unavailable media. The same screen opens the case dossier and operations console. **Service assurance** connects camera health, monitoring metrics and assigned work; **Investigation** connects search and historical patterns. Missing probe data is shown as unknown rather than healthy. This local path does not run Frigate, MQTT or PostgreSQL.
+
+```powershell
+cd C:\Users\Noah\Darson\Darson\darson-intel
+docker compose up -d --build
+Invoke-RestMethod -Method Post http://localhost:8080/events/ingest/mock
+Invoke-RestMethod -Method Post http://localhost:8080/tracks/correlate
+Invoke-RestMethod -Method Post http://localhost:8080/incidents/build
 ```
-EVENT -> CONTEXT -> CORRELATION -> INCIDENT -> HISTORY -> INVESTIGATION
-```
 
-## Guardrails (hard constraints)
-- Human-in-the-loop decision support only.
-- **No** facial recognition, **no** gait recognition, **no** PII database.
-- **No** autonomous crime/threat verdicts, **no** automated physical response.
+The legacy `.\scripts\demo.ps1` and mock endpoints remain available for pipeline development. The owner-review fixture is `backend/scenarios/review_v1.json`; its manifest is available at `/api/v1/demo/manifest` in development. Its replay endpoint is disabled in production.
 
-## Capabilities
-1. Event normalization (source-agnostic canonical schema)
-2. Behavioural sequence analysis (per-track state machine)
-3. Cross-camera correlation (topology + time-window + motion + OSNet appearance embeddings)
-4. Incident graph + chronological cross-camera timeline reconstruction
-5. Historical pattern intelligence (recurring paths/locations/time-windows/hotspots/anomalies)
-6. Investigation (deterministic structured search first; optional local LLM for NL + summaries)
-7. Evidence traceability: Incident -> Event -> Camera -> Evidence
-8. Operator dashboard
+## Authentication and scope
 
-## Inputs (pluggable behind one EventSource interface)
-- **Mock Event Source** — scripted offline scenarios (default demo path).
-- **Frigate Adapter** — read-only: subscribes to `frigate/events` (MQTT) and fetches
-  evidence via Frigate's HTTP API. We consume Frigate; we do not fork it.
+The browser uses OIDC Authorization Code with PKCE when `DARSON_AUTH_ISSUER` and `DARSON_OIDC_CLIENT_ID` are configured as frontend build arguments. The API verifies bearer tokens against configured issuer, audience and HTTPS JWKS, then derives tenant/site/role from provisioned server-side grants. Caller-supplied tenant, site and actor headers are not trusted. Production requires an identity-provider SPA registration, exact redirect/logout origins, role grants, MFA policy where appropriate, and an authenticated TLS ingress. The browser session is held in memory; logout calls the API revocation endpoint and the identity provider's end-session endpoint when available.
 
-## Tech stack
-- Backend: Python + FastAPI + SQLAlchemy
-- DB: PostgreSQL + pgvector (SQLite fallback for offline tests/demo)
-- Re-ID embeddings: OSNet / TorchReID (512-d)
-- Frontend: React + Vite + TypeScript
+The backend remains authoritative for incident, response, evidence, export and configuration permissions. Responders are limited to assigned work. PostgreSQL tenant policies and the SQLite ORM scope filters are defense-in-depth; live PostgreSQL role/RLS validation remains outstanding.
 
-## Full-stack demo (Docker · PostgreSQL + pgvector · single origin)
+## Evidence, response and service levels
 
-### 1. Prerequisites
-- Docker + Docker Compose v2 (tested with Docker 29 / Compose v2).
-- ~2 GB free RAM and disk for the Frigate + Postgres images.
-- For local (non-Docker) dev/tests: Python 3.12 and Node 20+.
+Evidence is stored in the encrypted local object store, authorized through the API, hash-checked on retrieval, audited, and subject to expiry/retention holds. Source URLs and object keys must not be exposed to the browser or in reports. Response episodes record assignment, acknowledgement, response, SOP steps, resolution and handover with optimistic version checks. SLA clocks are based on the configured policy snapshot; breach history is persisted and a local/no-send notification adapter records attempts. External delivery, real on-call escalation and multi-level escalation schedules require deployment-specific provider approval and remain incomplete.
 
-### 2. Environment variables (set by compose; override as needed)
-| Variable | Purpose | Compose value |
-|---|---|---|
-| `DARSON_DATABASE_URL` | Backend DB DSN | `postgresql+psycopg2://darson:darson@db:5432/darson` |
-| `DARSON_EVENT_SOURCE` | `mock` (deterministic) or `frigate` | `mock` |
-| `DARSON_FRIGATE_MQTT_HOST` | Broker host for the adapter | `mosquitto` |
-| `DARSON_FRIGATE_API_BASE` | Server-side Frigate API (internal) | `http://frigate:5000` |
-| `DARSON_FRIGATE_PUBLIC_BASE` | Browser-facing evidence base (via proxy) | `/frigate` |
-| `VITE_API_BASE` | Frontend API base (build-time) | *empty* → same-origin |
-No secrets are passed to the browser; Frigate/DB credentials stay server-side.
+PDF and ZIP reports are generated asynchronously from a pinned case snapshot and downloads recheck authorization and audit access. ZIP includes the report, case/timeline data, evidence hashes/provenance and available authorized media; missing or integrity-failed media is represented in its manifest. Reports are operational records and require human review.
 
-### 3 & 4. First startup / full-stack startup
-```
-docker compose up -d --build     # db + mosquitto + frigate + backend + frontend + proxy
-docker compose ps                # wait until every service shows "healthy"
-```
-The stack is migration-driven on Postgres (Alembic `upgrade head` runs on boot;
-the pgvector extension is created automatically).
+Camera health separates stream, video quality, recording availability and evidence capture. Frame comparison is combined with source FPS and a debounce window; static scenes alone are not called frozen. These probes require a reachable, authenticated Frigate API and have not been tested against a live camera/VMS in this environment.
 
-### 5. Demo command (reproducible, one command)
-```
-./scripts/demo.sh                # macOS/Linux
-.\scripts\demo.ps1               # Windows PowerShell
-```
-It builds + starts the stack, waits for all healthchecks, seeds the deterministic
-demo pipeline **through the reverse proxy** (mock scenario → correlate → build
-incident, persisted in PostgreSQL), and prints the browser URL.
+## Pilot deployment configuration
 
-### 6. Browser URL
-Open **http://localhost:8080** — the single reverse-proxy origin:
-- `/` → dashboard, `/api/...`, `/events`, `/tracks`, `/incidents`, … → backend,
-  `/frigate/...` → Frigate media/API (browser-reachable evidence snapshots).
+Use `docker-compose.production.yml` as a restricted single-host profile behind an authenticated TLS ingress. It removes public DB, MQTT and Frigate ports, separates app/database/source networks, runs Alembic through a migration service and uses a restricted runtime database URL. PostgreSQL bootstrap roles are created only when its data volume is initialized; existing volumes need a reviewed/manual role migration. The runtime role must not own the schema or be a superuser.
 
-### 7. Backend tests
-```
+Supply secrets outside Git and image build arguments. Required deployment values include `POSTGRES_PASSWORD`, `DARSON_MIGRATION_DB_PASSWORD`, `DARSON_RUNTIME_DB_PASSWORD`, `DARSON_MIGRATION_DATABASE_URL`, `DARSON_RUNTIME_DATABASE_URL`, `DARSON_MQTT_PASSWORD`, `DARSON_EVIDENCE_KEY`, `DARSON_SPOOL_KEY`, OIDC issuer/audience/JWKS/client ID, worker tenant/site, source identity, and protected file paths for the Mosquitto password/ACL and Frigate config. `DARSON_FRIGATE_API_TOKEN` is server-side only. Use a deployment secret manager or protected files; never commit secret values. Verify Frigate token scope, broker ACLs, TLS termination, backup encryption, key recovery, retention/hold policy and staffed escalation ownership before a pilot.
+
+The profile provides network isolation and configuration hooks; it does not prove external reachability restrictions, token scope, credential rotation, database least privilege, backup recovery, or customer-specific deployment security. The Frigate config must enable authentication and restrict the API to the application network. MQTT should deny anonymous access and limit the Frigate and DARSON accounts to required topics.
+
+## Validation commands
+
+```powershell
 cd backend
 python -m pip install -r requirements-dev.txt
-python -m pytest -q              # 74 tests (SQLite; fast, deterministic)
+python -m pytest -q
 python -m ruff check .
+cd ..\frontend
+npm ci
+npm test
+npm run build
+npm run e2e:install
+npm run e2e
 ```
 
-### 8. Frontend tests
-```
-cd frontend
-npm install
-npm test                         # 15 Vitest component + API-client tests
-npm run build                    # type-check + production build
-```
+For container validation, start the stack first and run `docker compose -f docker-compose.yml -f docker-compose.production.yml config` with deployment variables set. Browser E2E targets `http://localhost:8080`. Playwright requires the Docker stack and browser binary. Docker image pulls currently fail through Docker Desktop's proxy; do not report Docker/PostgreSQL/browser E2E as passed until rerun successfully.
 
-### 9. Playwright browser E2E (against the running stack)
-```
-# with the full stack up (docker compose up -d):
-cd frontend
-npm run e2e:install              # one-time: install the chromium browser
-DARSON_ORIGIN=http://localhost:8080 npm run e2e
-```
-This is a true browser → proxy → frontend/backend → **PostgreSQL** flow (no
-mocking): it opens the incident, verifies timeline/graph/correlation/evidence,
-runs the lifecycle (start triage → confirm), reloads, and asserts the confirmed
-state persisted; it also asserts an invalid transition is rejected (409).
+## Backup, recovery and limitations
 
-### 10. Stop / reset
-```
-docker compose down              # stop + remove containers (keeps DB volume)
-docker compose down -v           # also wipe the PostgreSQL + Frigate volumes
-./scripts/demo.sh down | reset   # convenience wrappers
-```
+Back up PostgreSQL, encrypted evidence objects, encrypted spool state and their encryption keys together. Test restore into an isolated deployment before relying on recovery. Durable queues and encrypted spools support restart recovery, but live broker/database/object-store restart testing has not been performed here. The single-host local evidence store has no demonstrated replication or disaster-recovery guarantee. Legal compliance and security certification are not claimed.
 
-### 11. Current Frigate synthetic-source limitation
-The bundled Frigate dev config (`deploy/frigate-config.yml`) uses a synthetic
-`lavfi testsrc` pattern — it exercises the **infrastructure/MQTT path** (Frigate
-publishes `frigate/*`, the adapter consumes them) but the test pattern contains
-**no people, so it produces no person detections and no `frigate/events`**.
-Repeatable **intelligence** behaviour is demonstrated with the deterministic mock
-scenario (and captured Frigate payload fixtures in the tests). A real deployment
-requires real camera/video feeding Frigate to generate detections and real
-snapshot/clip media.
+## Controlled review demo status
 
-## Real-video validation (genuine person detection, no camera)
+The current owner-review replay has a fixed clock, versioned fixture, stable source event identifiers, isolated local database and three guided cases. It does not yet cover the full ten-scenario company-review package: pre-seeded dismissal, camera/recording fault, assignment/acknowledgement, SLA escalation, a client-safe service report and historical pattern are still outstanding as guided cases. Response, SLA and export functionality exists in the console but has not been turned into those complete walkthroughs. Do not present local SQLite replay validation as a production deployment or live VMS validation.
+# Parking visit pilot
 
-To validate the pipeline with **real detectable video** — actual people detected
-by Frigate's model — without any camera or CCTV credentials, use the real-video
-overlay. It runs Frigate against prerecorded pedestrian clips (looped in-process
-by Frigate's own ffmpeg) and drains the **live** `frigate/events` MQTT stream
-into DARSON via a background ingestor.
-
-```
-./scripts/fetch_test_videos.sh          # fetch CC-BY-4.0 sample clips (gitignored)
-docker compose -f docker-compose.yml -f docker-compose.real-video.yml up -d --build
-# or simply:  ./scripts/demo.sh real     (.\scripts\demo.ps1 real on Windows)
-```
-Then open **http://localhost:8080**.
-
-- **Test videos**: `intel-iot-devkit/sample-videos` (license **CC-BY-4.0**,
-  attribution: Intel IoT DevKit). Fetched on demand into `deploy/videos/` and
-  **never committed** (gitignored). Three clips become three cameras
-  (`cam_a → cam_b → cam_c`).
-- **Frigate config**: `deploy/frigate-config.real.yml` — direct ffmpeg file input
-  (`-re -stream_loop -1 -fflags +genpts`), CPU detector, `person` tracking,
-  snapshots + recordings for real evidence.
-- **Backend**: with `DARSON_EVENT_SOURCE=frigate`, a background ingestor
-  subscribes to `frigate/events` and persists real detections; run
-  `correlate` + `build_incidents` (the `demo.sh real` flow does this) to produce
-  incidents from the real tracks.
-- **Evidence**: real snapshots are served browser-reachably at
-  `/frigate/api/events/<id>/snapshot.jpg` through the reverse proxy.
-
-### GPU requirements
-- The dev setup uses Frigate's **CPU detector** and DARSON's **deterministic mock
-  Re-ID backend**, so **no GPU is required** (and none is used in the validated
-  dev environment — there is no GPU memory figure to report here).
-- Production throughput benefits from a hardware detector (Coral/GPU) for Frigate
-  and, if enabled, an OSNet/TorchReID GPU backend for appearance embeddings
-  (`backend/requirements-reid.txt`). Those are optional and out of scope for the
-  dev validation.
-
-### Tested development behaviour vs intended production vs limitations
-- **Tested (dev, this repo)**: real person detection → `frigate/events` (MQTT) →
-  FrigateAdapter → CanonicalEvent → PostgreSQL → behaviour → cross-camera
-  **movement** correlation → incident graph → timeline → browser-reachable real
-  snapshot evidence → lifecycle persistence. Verified on the Docker/PostgreSQL/
-  pgvector stack.
-- **Intended production**: real cameras/RTSP feeding Frigate, a hardware
-  detector, an OSNet Re-ID backend over real snapshot crops, and hardened MQTT
-  credentials — all behind the same source-agnostic adapter boundary.
-- **Limitations / honest scope**:
-  - Cross-camera correlation is **movement** correlation from topology + timing +
-    appearance signals; it is **not** a claim of human identity.
-  - The Re-ID path in dev is a deterministic mock; **no labeled Re-ID accuracy is
-    claimed** — that requires a proper labeled evaluation dataset.
-  - The sample clips contain independent pedestrians, so cross-camera "same
-    movement" links are illustrative of the mechanism, not ground-truth identity.
-  - This is a validated development demonstration; it is **not** presented as
-    production-ready.
-
-## Quick start (offline dev, no Docker)
-```
-cd backend
-python -m pip install -r requirements-dev.txt
-python -m pytest -q                     # run the test suite (SQLite)
-uvicorn app.main:app --reload           # API at http://localhost:8000
-```
-
-## Frontend — operator investigation dashboard
-A React + TypeScript dashboard that consumes the read-only **v1 incident API**
-(`/api/v1/incidents/...`). It walks the operator through the investigation:
-incident → why it was created → supporting tracks/events → timeline →
-correlations → graph → evidence → lifecycle review.
-
-```
-cd frontend
-npm install
-npm run dev        # dashboard at http://localhost:5173 (expects backend at :8000)
-npm test           # component + API-client tests (Vitest)
-npm run build      # type-check + production build
-```
-
-Point the dashboard at a non-default backend with `VITE_API_BASE`, e.g.
-`VITE_API_BASE=http://localhost:8077 npm run dev`. The frontend talks only to the
-backend HTTP API — it never accesses PostgreSQL directly and holds no Frigate
-credentials.
-
-## Deterministic demo workflow (no CCTV hardware)
-Full stack (recommended — verified against PostgreSQL):
-```
-./scripts/demo.sh            # or  .\scripts\demo.ps1  on Windows
-# then open http://localhost:8080 and open the generated incident:
-#   why -> timeline -> correlations -> graph -> evidence -> change state
-```
-Frontend-only against a local backend (SQLite is fine for this path):
-```
-cd backend && uvicorn app.main:app --port 8000     # terminal 1
-cd frontend && npm run dev                          # terminal 2 (http://localhost:5173)
-# click "Run demo pipeline" in the dashboard, then open the incident
-```
-The same path is exercised headlessly by the backend tests, by
-`test_task12_e2e.py`, and by the Playwright browser E2E. It uses the built-in
-mock event source and needs no cameras.
-
-## Current limitations
-- The synthetic Frigate stream (`deploy/frigate-config.yml`) is an
-  infrastructure/MQTT source only — its test pattern contains no people, so it
-  produces **no person detections** and therefore no `frigate/events`. Repeatable
-  intelligence behaviour is demonstrated with the deterministic **mock scenario**
-  and captured Frigate payload fixtures in the tests.
-- In the full-stack deployment, evidence URLs are built as same-origin
-  `/frigate/api/events/<id>/snapshot.jpg` and are **browser-reachable through the
-  reverse proxy**. For mock-scenario incidents the evidence references are
-  placeholders and the dashboard degrades gracefully (no fabricated media). Real
-  snapshots/clips require a real Frigate deployment with detections + media.
-- A real deployment requires real camera/video sources feeding Frigate (or another
-  `EventSource`).
-
-## Attribution
-See `NOTICE`. Frigate (MIT) is consumed as an event source; the Detect→Connect→Report
-and explainable-incident-card concepts were informed by the SENTINEL-X (MIT) project
-and reimplemented here.
+The parking-session prototype and its limits are documented in [docs/parking-visit-prototype.md](docs/parking-visit-prototype.md). It accepts registered ANPR, camera-detector and credential-link signals; gives the approved driver register priority over the temporary exit-track baseline; shows medium-priority yellow reviews for a high-quality appearance difference; and queues high-priority tampering or prolonged-loitering alerts to configured security and floor-guard contacts. It does not currently perform face recognition, plate OCR, or action detection itself.

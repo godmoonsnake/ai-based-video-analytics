@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Event, Incident, IncidentCamera
+from app.models.entities import Event, Incident, IncidentCamera, IncidentEvent
+from app.models.evidence import EvidenceObject
 
 
 @dataclass
@@ -98,13 +99,31 @@ def search_incidents(db: Session, f: SearchFilter) -> list[Incident]:
 def run_search(db: Session, f: SearchFilter) -> SearchResults:
     events = search_events(db, f)
     incidents = search_incidents(db, f)
+    if any((f.event_type, f.label, f.sub_label, f.zone, f.text)):
+        matched = {event.id for event in events}
+        related = set(db.scalars(select(IncidentEvent.incident_id).where(
+            IncidentEvent.event_id.in_(matched))).all()) if matched else set()
+        incidents = [incident for incident in incidents if incident.id in related]
+    vault = {}
+    if events:
+        for obj in db.scalars(select(EvidenceObject).where(
+                EvidenceObject.event_id.in_([event.id for event in events]))):
+            vault.setdefault(obj.event_id, {})[obj.kind] = obj
+
+    def evidence_ref(event: Event) -> dict:
+        records = vault.get(event.id, {})
+        return {kind: {
+            "status": item.status if item else "not-requested",
+            "content_url": f"/api/v1/evidence/{item.id}/content" if item and item.status == "available" else None,
+        } for kind, item in (("snapshot", records.get("snapshot")), ("clip", records.get("clip")))}
+
     return SearchResults(
         filter=f.to_dict(),
         events=[
             {
                 "event_id": e.id, "camera_id": e.camera_id, "event_type": e.event_type,
                 "label": e.label, "sub_label": e.sub_label, "ts": e.ts,
-                "evidence": json.loads(e.evidence_ref_json) if e.evidence_ref_json else {},
+                "evidence": evidence_ref(e),
             }
             for e in events
         ],

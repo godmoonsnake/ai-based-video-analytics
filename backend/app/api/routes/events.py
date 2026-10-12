@@ -33,7 +33,9 @@ def _serialize(e: Event) -> dict:
             "velocity_angle": e.velocity_angle,
             "avg_speed": e.avg_speed,
         },
-        "evidence": json.loads(e.evidence_ref_json) if e.evidence_ref_json else {},
+        # Source URLs are never returned; evidence is served only from the
+        # authorized DARSON evidence vault endpoints.
+        "evidence": {"has_snapshot": e.has_snapshot, "has_clip": e.has_clip},
     }
 
 

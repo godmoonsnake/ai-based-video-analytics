@@ -73,7 +73,7 @@ def list_global_tracks(db: Session = Depends(get_db)) -> list[dict]:
     from app.models.entities import GlobalTrack, GlobalTrackMember
 
     out = []
-    for gt in db.execute(select(GlobalTrack)).scalars().all():
+    for gt in db.execute(select(GlobalTrack).where(GlobalTrack.current.is_(True))).scalars().all():
         members = db.execute(
             select(GlobalTrackMember).where(GlobalTrackMember.global_track_id == gt.id)
         ).scalars().all()
@@ -82,6 +82,9 @@ def list_global_tracks(db: Session = Depends(get_db)) -> list[dict]:
             "first_seen": gt.first_seen,
             "last_seen": gt.last_seen,
             "confidence": gt.confidence,
+            "track_kind": "correlated_movement" if len(members) > 1 else "single_camera",
+            "score_is_probability": False,
+            "run_id": gt.run_id,
             "members": [
                 {
                     "camera_id": m.camera_id,

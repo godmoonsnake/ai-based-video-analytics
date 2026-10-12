@@ -20,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.config import get_settings
-from app.db.session import Base, JSONBType, Vector
+from app.db.session import Base, JSONBType, Vector, Scoped
 
 _EMB_DIM = get_settings().embedding_dim
 
@@ -29,12 +29,11 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class Camera(Base):
+class Camera(Scoped, Base):
     __tablename__ = "camera"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    site_id: Mapped[str | None] = mapped_column(String, nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     x: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -45,7 +44,7 @@ class Camera(Base):
     zones: Mapped[list["Zone"]] = relationship(back_populates="camera")
 
 
-class CameraEdge(Base):
+class CameraEdge(Scoped, Base):
     """Topology edge: expected walking transit between two cameras."""
 
     __tablename__ = "camera_edge"
@@ -58,7 +57,7 @@ class CameraEdge(Base):
     bidirectional: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-class Zone(Base):
+class Zone(Scoped, Base):
     __tablename__ = "zone"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -70,7 +69,7 @@ class Zone(Base):
     camera: Mapped[Camera] = relationship(back_populates="zones")
 
 
-class Event(Base):
+class Event(Scoped, Base):
     """Canonical normalized event (source-agnostic)."""
 
     __tablename__ = "event"
@@ -96,10 +95,17 @@ class Event(Base):
     has_clip: Mapped[bool] = mapped_column(Boolean, default=False)
     evidence_ref_json: Mapped[str | None] = mapped_column(Text)
     raw_json: Mapped[str | None] = mapped_column(Text)
+    dedup_key: Mapped[str | None] = mapped_column(String, unique=True)
+    source_instance: Mapped[str | None] = mapped_column(String)
+    source_revision: Mapped[str | None] = mapped_column(String)
+    event_kind: Mapped[str | None] = mapped_column(String)
+    payload_digest: Mapped[str | None] = mapped_column(String)
+    received_at: Mapped[float | None] = mapped_column(Float)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
-class TrackEmbedding(Base):
+class TrackEmbedding(Scoped, Base):
     __tablename__ = "track_embedding"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -110,18 +116,21 @@ class TrackEmbedding(Base):
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
-class GlobalTrack(Base):
+class GlobalTrack(Scoped, Base):
     __tablename__ = "global_track"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     first_seen: Mapped[float | None] = mapped_column(Float)
     last_seen: Mapped[float | None] = mapped_column(Float)
     confidence: Mapped[float | None] = mapped_column(Float)
+    fingerprint: Mapped[str | None] = mapped_column(String, unique=True)
+    run_id: Mapped[str | None] = mapped_column(String)
+    current: Mapped[bool] = mapped_column(Boolean, default=True)
 
     members: Mapped[list["GlobalTrackMember"]] = relationship(back_populates="global_track")
 
 
-class GlobalTrackMember(Base):
+class GlobalTrackMember(Scoped, Base):
     __tablename__ = "global_track_member"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -134,11 +143,12 @@ class GlobalTrackMember(Base):
     global_track: Mapped[GlobalTrack] = relationship(back_populates="members")
 
 
-class Incident(Base):
+class Incident(Scoped, Base):
     __tablename__ = "incident"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     status: Mapped[str] = mapped_column(String, default="open")  # open|confirmed|dismissed
+    category: Mapped[str] = mapped_column(String, default="review")
     start_time: Mapped[float | None] = mapped_column(Float)
     end_time: Mapped[float | None] = mapped_column(Float)
     priority: Mapped[str | None] = mapped_column(String)  # low|medium|high|critical
@@ -147,6 +157,8 @@ class Incident(Base):
         ForeignKey("global_track.id"), nullable=True
     )
     summary_text: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    dedup_key: Mapped[str | None] = mapped_column(String, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     cameras: Mapped[list["IncidentCamera"]] = relationship(back_populates="incident")
@@ -159,7 +171,7 @@ class Incident(Base):
     )
 
 
-class IncidentCamera(Base):
+class IncidentCamera(Scoped, Base):
     __tablename__ = "incident_camera"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -169,7 +181,7 @@ class IncidentCamera(Base):
     incident: Mapped[Incident] = relationship(back_populates="cameras")
 
 
-class IncidentEvent(Base):
+class IncidentEvent(Scoped, Base):
     __tablename__ = "incident_event"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -180,7 +192,7 @@ class IncidentEvent(Base):
     incident: Mapped[Incident] = relationship(back_populates="events")
 
 
-class IncidentEdge(Base):
+class IncidentEdge(Scoped, Base):
     __tablename__ = "incident_edge"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -193,7 +205,7 @@ class IncidentEdge(Base):
     incident: Mapped[Incident] = relationship(back_populates="edges")
 
 
-class IncidentNode(Base):
+class IncidentNode(Scoped, Base):
     """A typed node in an incident's evidence graph.
 
     Heterogeneous node referencing an existing domain entity. `ref_id` is the
@@ -223,7 +235,7 @@ class IncidentNode(Base):
     incident: Mapped[Incident] = relationship(back_populates="nodes")
 
 
-class IncidentGraphEdge(Base):
+class IncidentGraphEdge(Scoped, Base):
     """A typed, explainable edge between two IncidentNodes.
 
     edge_type is one of:
@@ -258,7 +270,7 @@ class IncidentGraphEdge(Base):
     target_node: Mapped[IncidentNode] = relationship(foreign_keys=[target_node_id])
 
 
-class IncidentStateTransition(Base):
+class IncidentStateTransition(Scoped, Base):
     """Append-only history of incident lifecycle state changes.
 
     Records every accepted transition of an incident through the human-in-the-loop
@@ -284,7 +296,7 @@ class IncidentStateTransition(Base):
     incident: Mapped[Incident] = relationship(back_populates="state_transitions")
 
 
-class BehaviouralSequence(Base):
+class BehaviouralSequence(Scoped, Base):
     __tablename__ = "behavioural_sequence"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -294,7 +306,7 @@ class BehaviouralSequence(Base):
     anomaly_score: Mapped[float | None] = mapped_column(Float)
 
 
-class HistoricalPattern(Base):
+class HistoricalPattern(Scoped, Base):
     __tablename__ = "historical_pattern"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -306,7 +318,7 @@ class HistoricalPattern(Base):
     score: Mapped[float | None] = mapped_column(Float)
 
 
-class OperatorFeedback(Base):
+class OperatorFeedback(Scoped, Base):
     """Lightweight human-in-the-loop feedback (no RBAC)."""
 
     __tablename__ = "operator_feedback"
@@ -318,7 +330,7 @@ class OperatorFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
-class AuditLog(Base):
+class AuditLog(Scoped, Base):
     """Lightweight audit trail (no compliance/enterprise features)."""
 
     __tablename__ = "audit_log"

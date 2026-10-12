@@ -1,0 +1,74 @@
+/* ============================================================
+   DARSON Forensic Console — design tokens
+   Dark operator theme: hairline panels, signal-mint accent,
+   instrument-grade data typography (JetBrains Mono).
+   ============================================================ */
+
+:root {
+  /* Surfaces */
+  --bg0: #04060a; /* page */
+  --bg1: #090d15; /* panel */
+  --bg2: #0d1320; /* raised */
+  --bg3: #131b2b; /* hover / active */
+  --bg-inset: #060a10; /* wells, code, media frames */
+
+  /* Lines */
+  --line: #1b2434;
+  --line-strong: #2b3a55;
+
+  /* Ink */
+  --ink: #e9eef6;
+  --ink-dim: #a3aec2;
+  --ink-faint: #67738b;
+
+  /* Signal palette */
+  --mint: #43e0a0;
+  --mint-soft: rgba(67, 224, 160, 0.14);
+  --mint-line: rgba(67, 224, 160, 0.35);
+  --blue: #5ea2f7;
+  --blue-soft: rgba(94, 162, 247, 0.14);
+  --violet: #b08cff;
+  --violet-soft: rgba(176, 140, 255, 0.14);
+  --amber: #f2b33d;
+  --amber-soft: rgba(242, 179, 61, 0.14);
+  --red: #ff5c5c;
+  --red-soft: rgba(255, 92, 92, 0.14);
+  --cyan: #41c4dd;
+
+  /* Priority scale */
+  --pri-critical: #ff5c5c;
+  --pri-high: #ff9e64;
+  --pri-medium: #f2c451;
+  --pri-low: #7fa3c0;
+  --pri-unknown: #71809a;
+
+  /* Lifecycle states */
+  --state-open: #5ea2f7;
+  --state-triage: #b08cff;
+  --state-confirmed: #43e0a0;
+  --state-dismissed: #71809a;
+
+  /* Confidence bands */
+  --band-high: #43e0a0;
+  --band-medium: #f2b33d;
+  --band-low: #ff9e64;
+  --band-unknown: #71809a;
+
+  /* Typography */
+  --font-ui:
+    "Space Grotesk Variable", "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono:
+    "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Geometry */
+  --radius: 10px;
+  --radius-sm: 7px;
+  --rail-w: 58px;
+  --feed-w: 408px;
+  --topbar-h: 52px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-fast: 140ms var(--ease);
+  --t-med: 220ms var(--ease);
+}
