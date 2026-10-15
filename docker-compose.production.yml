@@ -1,12 +1,13 @@
 # Restricted single-host pilot composition. Place behind an authenticated TLS
 # ingress and supply secrets through the deployment environment/secret manager.
 x-pilot-environment: &pilot_environment
+  DARSON_FCM_SERVICE_ACCOUNT_FILE: ${DARSON_FCM_SERVICE_ACCOUNT_FILE:-}
   DARSON_PILOT_MODE: "true"
   DARSON_EVENT_SOURCE: frigate
   DARSON_FRIGATE_EMIT_UPDATES: "true"
   DARSON_PILOT_DATA_AGREEMENT_REF: ${DARSON_PILOT_DATA_AGREEMENT_REF:?set the signed data/retention agreement reference}
   DARSON_PILOT_SUPERVISOR_SUBJECT: ${DARSON_PILOT_SUPERVISOR_SUBJECT:?set supervisor IdP subject}
-  DARSON_NOTIFICATION_PROVIDER: ${DARSON_NOTIFICATION_PROVIDER:?choose telegram or whatsapp}
+  DARSON_NOTIFICATION_PROVIDER: ${DARSON_NOTIFICATION_PROVIDER:?choose telegram, whatsapp or fcm}
   DARSON_TELEGRAM_BOT_TOKEN: ${DARSON_TELEGRAM_BOT_TOKEN:-}
   DARSON_WHATSAPP_ACCESS_TOKEN: ${DARSON_WHATSAPP_ACCESS_TOKEN:-}
   DARSON_WHATSAPP_PHONE_NUMBER_ID: ${DARSON_WHATSAPP_PHONE_NUMBER_ID:-}

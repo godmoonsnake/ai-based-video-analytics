@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import hashlib
+import uuid
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,6 +26,7 @@ from app.models.operations import (
     IncidentExport,
     CameraHealthCurrent,
 )
+from app.models.security import Principal, PrincipalScope
 from app.operations.service import (
     apply_action,
     latest_episode,
@@ -733,6 +735,48 @@ def create_policy(body: PolicyIn, db=Depends(get_db)):
 class PostIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     instructions: str = Field(min_length=1, max_length=2000)
+    floor: str | None = Field(default=None, max_length=80)
+    block: str | None = Field(default=None, max_length=80)
+
+
+@router.get("/config/posts")
+def list_posts(db=Depends(get_db)):
+    require_role(db, {"supervisor", "operator", "configuration_admin"})
+    return [{"id": row.id, "name": row.name, "instructions": row.instructions,
+             "floor": row.floor, "block": row.block}
+            for row in db.scalars(select(SecurityPost).order_by(SecurityPost.name))]
+
+
+@router.get("/config/guards")
+def list_guards(db=Depends(get_db)):
+    scope = require_role(db, {"supervisor", "operator", "configuration_admin"})
+    grants = db.scalars(select(PrincipalScope).where(
+        PrincipalScope.tenant_id == scope.tenant,
+        PrincipalScope.site_id == scope.site,
+        PrincipalScope.role == "responder",
+    ).order_by(PrincipalScope.subject)).all()
+    return [{"subject": row.subject, "demo": row.subject.startswith("demo-")}
+            for row in grants if (principal := db.get(Principal, row.subject)) and principal.enabled]
+
+
+class DemoGuardIn(BaseModel):
+    subject: str = Field(pattern=r"^demo-[a-z0-9-]{3,40}$")
+
+
+@router.post("/demo/guards")
+def create_demo_guard(body: DemoGuardIn, db=Depends(get_db)):
+    scope = require_role(db, {"supervisor"})
+    if get_settings().environment == "production" or get_settings().auth_mode != "development":
+        raise HTTPException(404, "demo guard creation is unavailable")
+    if db.get(Principal, body.subject):
+        raise HTTPException(409, "demo guard ID already exists")
+    db.add(Principal(subject=body.subject, enabled=True, tokens_valid_after=0))
+    db.flush()
+    db.add(PrincipalScope(subject=body.subject, tenant_id=scope.tenant,
+                          site_id=scope.site, role="responder"))
+    db.add(AuditLog(actor=scope.actor, action="demo_guard_created", target=body.subject))
+    db.commit()
+    return {"subject": body.subject, "demo": True}
 
 
 @router.post("/config/posts")
@@ -742,6 +786,7 @@ def create_post(body: PostIn, db=Depends(get_db)):
     if db.get(SecurityPost, identifier):
         raise HTTPException(409, "post already exists")
     db.add(SecurityPost(id=identifier, **body.model_dump()))
+    db.add(AuditLog(actor=scope.actor, action="security_post_created", target=identifier))
     db.commit()
     return {"id": identifier}
 
@@ -749,22 +794,51 @@ def create_post(body: PostIn, db=Depends(get_db)):
 class ShiftIn(BaseModel):
     post_id: str
     subject: str
-    starts_at: float
-    ends_at: float
+    starts_at: float = Field(allow_inf_nan=False)
+    ends_at: float = Field(allow_inf_nan=False)
+    label: Literal["day", "night", "custom"] = "custom"
+
+
+@router.get("/config/shifts")
+def list_shifts(db=Depends(get_db)):
+    require_role(db, {"supervisor", "operator", "configuration_admin"})
+    rows = db.scalars(select(Shift).order_by(Shift.starts_at.desc()).limit(300)).all()
+    return [{"id": row.id, "post_id": row.post_id, "subject": row.subject,
+             "starts_at": row.starts_at, "ends_at": row.ends_at,
+             "label": row.label, "cancelled_at": row.cancelled_at}
+            for row in rows]
 
 
 @router.post("/config/shifts")
 def create_shift(body: ShiftIn, db=Depends(get_db)):
-    require_role(db, {"supervisor", "configuration_admin"})
+    scope = require_role(db, {"supervisor", "configuration_admin"})
     assert_assignee(db, body.subject)
     if body.ends_at <= body.starts_at or not db.get(SecurityPost, body.post_id):
         raise HTTPException(422, "invalid shift interval or post")
-    identifier = digest(body.model_dump())
-    if db.get(Shift, identifier):
-        return {"id": identifier}
+    overlap = db.scalar(select(Shift.id).where(
+        Shift.subject == body.subject, Shift.cancelled_at.is_(None),
+        Shift.starts_at < body.ends_at, Shift.ends_at > body.starts_at,
+    ).limit(1))
+    if overlap:
+        raise HTTPException(409, "guard already has an overlapping shift")
+    identifier = uuid.uuid4().hex
     db.add(Shift(id=identifier, **body.model_dump()))
+    db.add(AuditLog(actor=scope.actor, action="guard_shift_created", target=identifier))
     db.commit()
     return {"id": identifier}
+
+
+@router.delete("/config/shifts/{identifier}")
+def cancel_shift(identifier: str, db=Depends(get_db)):
+    scope = require_role(db, {"supervisor", "configuration_admin"})
+    row = db.get(Shift, identifier)
+    if not row:
+        raise HTTPException(404, "shift not found")
+    if row.cancelled_at is None:
+        row.cancelled_at = time.time()
+        db.add(AuditLog(actor=scope.actor, action="guard_shift_cancelled", target=identifier))
+        db.commit()
+    return {"id": identifier, "cancelled": True}
 
 
 class ManualIn(BaseModel):

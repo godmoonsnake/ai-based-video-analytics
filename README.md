@@ -8,12 +8,12 @@ DARSON is a security operations pilot for a restricted area. The intended first 
 
 1. Frigate sends camera event updates through local MQTT; DARSON evaluates current zone presence and the site's time window.
 2. A person track matching the rule creates one guard task with the camera, time, instruction and protected incident evidence. Stale or finished tracks do not start new tasks.
-3. The desk displays the task immediately. An on-shift assigned guard can receive a Telegram or direct WhatsApp notice; failures, no guard on shift and overdue acknowledgement remain visible for escalation.
+3. The desk displays the task immediately. An on-shift assigned guard can receive a Telegram, direct WhatsApp or Android FCM notice; failures, no guard on shift and overdue acknowledgement remain visible for escalation.
 4. The guard acknowledges and records **Real incident**, **False alarm** or **Need help** with an observation note. A supervisor separately verifies completed outcomes before using them as labels for accuracy work.
 
 Provider acceptance means the provider accepted a request. It does not establish phone delivery, viewing or human acknowledgement. Evidence has access controls, an audit trail, retention expiry and holds.
 
-The guard desk is the default pilot UI and works at desk and phone widths. The existing investigation console remains available to supervisors. The six case-study and parking prototypes are experimental; pilot mode hides their routes and does not claim they are live visual detectors. Cross-camera ReID, a line-drawing editor and a native Android app are outside this pilot implementation.
+The guard desk remains the on-site pilot UI and works at desk and phone widths. The separate [Android guard app](mobile-android/README.md) includes source and a [simulated preview APK](mobile-android/DARSON-Guard-preview.apk), but Firebase, OIDC, HTTPS access and real phone delivery are not configured or validated here. The existing investigation console remains available to supervisors. The six case-study and parking prototypes are experimental; pilot mode hides their routes and does not claim they are live visual detectors. Cross-camera ReID and a line-drawing editor are outside this pilot implementation.
 
 ## Run the simulated review on Windows
 
@@ -25,10 +25,11 @@ python -m pip install -r requirements-dev.txt
 cd ..\frontend
 npm ci
 cd ..
+powershell -ExecutionPolicy Bypass -File .\scripts\fetch_test_videos.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\start-pilot-review.ps1
 ```
 
-Open <http://127.0.0.1:8081>. The script creates an isolated, **SIMULATED** task in `backend/var/pilot-review-v1.db`, starts its own local API, worker and web processes, and suppresses external messages. It does not connect a recorder. If ports 8011 or 8081 are occupied, stop the existing review processes before starting another copy:
+Open <http://127.0.0.1:8081>. The script creates an isolated, **SIMULATED** task and two demo guards with day/night shifts in `backend/var/pilot-review-v2.db`, starts its own local API, worker and web processes, and suppresses external messages. It does not connect a recorder. Use **Live cameras** for a camera wall of Frigate frame previews (the recorder is still required), **Video test** to play an MP4/WebM or the downloaded prerecorded clip and run the locally bundled pretrained person detector on sampled frames, and **Guard shifts** to assign demo guards to floor/block posts and day/night coverage. Uploaded clips remain in the browser. This detector is an unvalidated baseline; the video test does not apply restriction zones, create incidents or send guard alerts. If ports 8011 or 8081 are occupied, stop the existing review processes before starting another copy:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\stop-pilot-review.ps1

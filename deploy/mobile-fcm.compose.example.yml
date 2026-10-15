@@ -1,0 +1,13 @@
+# Combine with docker-compose.yml and docker-compose.production.yml for a site
+# that has completed Firebase setup. Keep the service-account JSON off Git.
+services:
+  backend:
+    environment:
+      DARSON_FCM_SERVICE_ACCOUNT_FILE: /run/secrets/darson-fcm.json
+    volumes:
+      - ${DARSON_FCM_SERVICE_ACCOUNT_HOST_FILE:?set protected FCM key path}:/run/secrets/darson-fcm.json:ro
+  worker:
+    environment:
+      DARSON_FCM_SERVICE_ACCOUNT_FILE: /run/secrets/darson-fcm.json
+    volumes:
+      - ${DARSON_FCM_SERVICE_ACCOUNT_HOST_FILE:?set protected FCM key path}:/run/secrets/darson-fcm.json:ro

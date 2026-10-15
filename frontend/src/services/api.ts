@@ -73,6 +73,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function requestBlob(path: string): Promise<Blob> {
+  const token = currentAccessToken();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: "no-store",
+    });
+  } catch {
+    throw new ApiError("Could not connect to the video source", 0);
+  }
+  if (!response.ok) {
+    if (response.status === 401) expireAuth();
+    throw new ApiError(`Video source unavailable (${response.status})`, response.status);
+  }
+  return response.blob();
+}
+
 async function download(path: string, fallbackName: string): Promise<void> {
   const token = currentAccessToken();
   const response = await fetch(`${API_BASE}${path}`, {
@@ -157,6 +174,30 @@ export const api = {
 
   listCameras(): Promise<Camera[]> {
     return request<Camera[]>("/cameras");
+  },
+
+  getLatestCameraFrame(id: string): Promise<Blob> {
+    return requestBlob(`/cameras/${encodeURIComponent(id)}/latest-frame`);
+  },
+
+  getDemoSampleVideo(sample: "people" | "store"): Promise<Blob> {
+    return requestBlob(`/api/v1/demo/sample-video/${sample}`);
+  },
+
+  listSecurityPosts(): Promise<SecurityPost[]> { return request("/api/v1/config/posts"); },
+  listGuardShifts(): Promise<GuardShift[]> { return request("/api/v1/config/shifts"); },
+  listGuards(): Promise<GuardRosterEntry[]> { return request("/api/v1/config/guards"); },
+  createSecurityPost(value: { name: string; instructions: string; floor: string; block: string }): Promise<{id: string}> {
+    return request("/api/v1/config/posts", { method: "POST", body: JSON.stringify(value) });
+  },
+  createGuardShift(value: { post_id: string; subject: string; starts_at: number; ends_at: number; label: "day" | "night" | "custom" }): Promise<{id: string}> {
+    return request("/api/v1/config/shifts", { method: "POST", body: JSON.stringify(value) });
+  },
+  cancelGuardShift(id: string): Promise<unknown> {
+    return request(`/api/v1/config/shifts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+  createDemoGuard(subject: string): Promise<{subject: string}> {
+    return request("/api/v1/demo/guards", { method: "POST", body: JSON.stringify({ subject }) });
   },
 
   getHealth(): Promise<HealthStatus> {
@@ -259,6 +300,10 @@ export interface PilotStatus {
   notification_provider: string; offline_operation_verified: boolean;
   retention_failures?: number;
 }
+
+export interface SecurityPost { id: string; name: string; instructions: string; floor: string | null; block: string | null }
+export interface GuardShift { id: string; post_id: string; subject: string; starts_at: number; ends_at: number; label: "day" | "night" | "custom"; cancelled_at: number | null }
+export interface GuardRosterEntry { subject: string; demo: boolean }
 export interface PilotNotice {
   id: string; case_id: string | null; camera_id: string | null; reason: string;
   status: string; created_at: number; failure_class: string | null; attempts: number;

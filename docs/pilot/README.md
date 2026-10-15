@@ -10,7 +10,7 @@
 - Current zone presence is kept distinct from historical entered zones. Finished tracks and stale/backlogged observations cannot create new emergency tasks. The maximum source age defaults to 30 seconds; measure clock synchronization and adjust deliberately.
 - Pilot worker skips correlation/ReID and blocks experimental case-study delivery. Pilot API hides replay, mock ingest, parking and experimental case-study routes. Existing research code remains in the repository.
 - Desk task exists immediately; assigned guard notification is queued alongside it. Supervisor receives missing-shift/contact, delivery-failure, unacknowledged and need-help escalation. Critical-event copying is an explicit option, off by default.
-- Telegram and direct WhatsApp providers record acceptance/failure with bounded retries. Acceptance is not phone receipt or human acknowledgement. Outbox delivery is at least once; a crash after provider acceptance can produce a duplicate message.
+- Telegram, direct WhatsApp and Android FCM providers record acceptance/failure with bounded retries. Acceptance is not phone receipt or human acknowledgement. Outbox delivery is at least once; a crash after provider acceptance can produce a duplicate message. Android setup is in `mobile-android/README.md`.
 - Only incident media is requested in pilot mode; updates share one source-track snapshot/clip instead of copying media per frame. Clips attach when ready and never delay task creation. No source-media URL or recorder secret is returned to the guard.
 - Evidence expiry cleanup runs periodically even when jobs are available, audits deletion and respects holds. Default local evidence retention is three days; production requires an explicitly agreed retention setting.
 - Public-key file verification is available for local token checks. It retains issuer, audience, expiry and grant checks. This does not implement offline sign-in: deploy/test a local identity service if offline login and session renewal are required.
@@ -97,7 +97,7 @@ flowchart LR
 ## Next stage
 
 - Line crossing and drawing editor after measuring real trajectory data; validate ordered two-zone entry if dense positions are unavailable.
-- Native Android app when its response workflow and maintenance cost are justified by pilot evidence; phone delivery failures require diagnosis before choosing a new channel.
+- Validate the Android guard app on the actual phones and mobile network, including notification permission, locked-screen delivery, token rotation, lost internet, handover and stale tasks; phone delivery failures require diagnosis before treating it as the primary channel.
 - Optional camera wall, recorder playback integration per tested brand, central multi-site synchronization and periodic reports after site acceptance.
 
 ## Reference checks

@@ -1,0 +1,4 @@
+# Copy to guard.properties and use the real pilot HTTPS addresses.
+DARSON_API_BASE=https://guard.example.com
+DARSON_OIDC_ISSUER=https://identity.example.com/realms/darson
+DARSON_OIDC_CLIENT_ID=darson-guard-android

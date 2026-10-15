@@ -25,6 +25,7 @@ class PilotContact(Scoped, Base):
     subject: Mapped[str] = mapped_column(String, index=True)
     channel: Mapped[str] = mapped_column(String)
     destination: Mapped[str] = mapped_column(String)
+    last_registered_at: Mapped[float | None] = mapped_column(Float)
 
 
 class PilotCase(Scoped, Base):

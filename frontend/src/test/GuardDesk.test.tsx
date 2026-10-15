@@ -7,7 +7,8 @@ import { useAuth } from "../services/auth";
 vi.mock("../services/api", async importOriginal => {
   const actual = await importOriginal<typeof import("../services/api")>();
   return { ...actual, api: { getPilotStatus: vi.fn(), getPilotTasks: vi.fn(), getCameraHealth: vi.fn(),
-    getPilotNotices: vi.fn(), markPilotPresented: vi.fn(), pilotAction: vi.fn(), verifyPilotLabel: vi.fn(), retryPilotNotice: vi.fn() } };
+    getPilotNotices: vi.fn(), markPilotPresented: vi.fn(), pilotAction: vi.fn(), verifyPilotLabel: vi.fn(), retryPilotNotice: vi.fn(),
+    listCameras: vi.fn(), listSecurityPosts: vi.fn(), listGuards: vi.fn(), listGuardShifts: vi.fn() } };
 });
 vi.mock("../services/auth", () => ({ useAuth: vi.fn(), currentAccessToken: () => null }));
 vi.mock("../components/ui/ProtectedMedia", () => ({
@@ -29,12 +30,27 @@ beforeEach(() => {
     notification_provider: "local", offline_operation_verified: false });
   vi.mocked(api.getPilotTasks).mockResolvedValue([task]);
   vi.mocked(api.getCameraHealth).mockResolvedValue([]);
+  vi.mocked(api.listCameras).mockResolvedValue([]);
+  vi.mocked(api.listSecurityPosts).mockResolvedValue([]);
+  vi.mocked(api.listGuards).mockResolvedValue([]);
+  vi.mocked(api.listGuardShifts).mockResolvedValue([]);
   vi.mocked(api.getPilotNotices).mockResolvedValue([]);
   vi.mocked(api.pilotAction).mockResolvedValue({});
   vi.mocked(api.markPilotPresented).mockResolvedValue({});
 });
 
 describe("guard desk", () => {
+  it("shows separate camera, recorded video, and guard shift views", async () => {
+    render(<GuardDesk onOpenSupervisor={vi.fn()} />);
+    await screen.findByText("Check the gate and report.");
+    fireEvent.click(screen.getByRole("button", { name: "Live cameras" }));
+    expect(await screen.findByText("No cameras are registered at this site.", { exact: false })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Video test" }));
+    expect(screen.getByText("Person detection: ready to test")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Guard shifts" }));
+    expect(await screen.findByRole("heading", { name: "Guard posts & shifts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Assign guard" })).toBeDisabled();
+  });
   it("shows the instruction and acknowledgement even without evidence", async () => {
     render(<GuardDesk onOpenSupervisor={vi.fn()} />);
     expect(await screen.findByText("Check the gate and report.")).toBeInTheDocument();

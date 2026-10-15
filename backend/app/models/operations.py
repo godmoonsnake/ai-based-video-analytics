@@ -8,6 +8,8 @@ class SecurityPost(Scoped, Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String)
     instructions: Mapped[str] = mapped_column(String)
+    floor: Mapped[str | None] = mapped_column(String)
+    block: Mapped[str | None] = mapped_column(String)
 
 
 class Shift(Scoped, Base):
@@ -17,6 +19,8 @@ class Shift(Scoped, Base):
     subject: Mapped[str] = mapped_column(String)
     starts_at: Mapped[float] = mapped_column(Float)
     ends_at: Mapped[float] = mapped_column(Float)
+    label: Mapped[str] = mapped_column(String, default="custom")
+    cancelled_at: Mapped[float | None] = mapped_column(Float)
 
 
 class SOP(Scoped, Base):

@@ -5,12 +5,14 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.adapters.ingestion import ingest_source, seed_embeddings
 from app.adapters.mock_source import MockEventSource, SCENARIOS_DIR, load_topology
 from app.config import get_settings
+from app.security.auth import require_role
 from app.db.session import get_db
 from app.models.entities import Camera, Event, IncidentEvent
 from app.models.evidence import EvidenceObject
@@ -20,6 +22,22 @@ from app.pipeline.incident_builder import build_incidents
 
 router = APIRouter(prefix="/api/v1/demo", tags=["demo"])
 FIXTURE = SCENARIOS_DIR / "review_v1.json"
+
+
+@router.get("/sample-video/{sample}")
+def sample_video(sample: str, db: Session = Depends(get_db)):
+    """Development-only, real prerecorded footage for the upload player demo."""
+    require_role(db, {"operator", "supervisor"})
+    if get_settings().environment == "production":
+        raise HTTPException(404, "not found")
+    names = {"people": "people-detection.mp4", "store": "store-aisle-detection.mp4"}
+    name = names.get(sample)
+    if name is None:
+        raise HTTPException(404, "sample video not found")
+    path = FIXTURE.parents[2] / "deploy" / "videos" / name
+    if not path.is_file():
+        raise HTTPException(404, "sample video is not installed")
+    return FileResponse(path, media_type="video/mp4", headers={"Cache-Control": "no-store"})
 
 
 def _fixture() -> dict:

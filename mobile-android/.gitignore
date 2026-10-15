@@ -1,0 +1,12 @@
+.gradle/
+.idea/
+build/
+app/build/
+local.properties
+guard.properties
+app/google-services.json
+*.apk
+!DARSON-Guard-preview.apk
+*.aab
+*.jks
+*.keystore

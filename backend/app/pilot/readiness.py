@@ -1,4 +1,5 @@
 from app.config import get_settings
+from pathlib import Path
 
 
 def validate_configuration():
@@ -11,7 +12,7 @@ def validate_configuration():
         raise RuntimeError(
             "set the approved pilot data/retention agreement reference before collection"
         )
-    if settings.notification_provider not in {"telegram", "whatsapp"}:
+    if settings.notification_provider not in {"telegram", "whatsapp", "fcm"}:
         raise RuntimeError(
             "production pilot requires a real notification provider; local suppression is demo only"
         )
@@ -19,6 +20,10 @@ def validate_configuration():
         raise RuntimeError("production pilot requires a supervisor fallback subject")
     if settings.notification_provider == "telegram" and not settings.telegram_bot_token:
         raise RuntimeError("production pilot requires Telegram credentials")
+    if settings.notification_provider == "fcm" and not (
+        settings.fcm_service_account_file and Path(settings.fcm_service_account_file).is_file()
+    ):
+        raise RuntimeError("production pilot requires a mounted FCM service account")
     if settings.notification_provider == "whatsapp" and not all(
         (
             settings.whatsapp_access_token,

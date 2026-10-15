@@ -181,6 +181,7 @@ def process_event(db, event_id, now=None):
             select(Shift)
             .where(
                 Shift.post_id == rule.post_id,
+                Shift.cancelled_at.is_(None),
                 Shift.starts_at <= now,
                 Shift.ends_at > now,
             )

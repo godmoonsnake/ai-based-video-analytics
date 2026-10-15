@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, type PilotTask, type PilotStatus, type PilotNotice, type CameraHealth } from "../../services/api";
 import { useAuth } from "../../services/auth";
 import { ProtectedImage, ProtectedVideo } from "../ui/ProtectedMedia";
+import { CameraWall } from "./CameraWall";
+import { VideoDemo } from "./VideoDemo";
+import { GuardSchedule } from "./GuardSchedule";
 import "../../styles/guard.css";
 
 const names: Record<string, string> = {
@@ -23,6 +26,7 @@ export function GuardDesk({ onOpenSupervisor }: { onOpenSupervisor: () => void }
   const [cameras, setCameras] = useState<CameraHealth[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(new URLSearchParams(location.search).get("task"));
   const [history, setHistory] = useState(false);
+  const [view, setView] = useState<"tasks" | "outcomes" | "cameras" | "video" | "schedule">("tasks");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -111,8 +115,11 @@ export function GuardDesk({ onOpenSupervisor }: { onOpenSupervisor: () => void }
     <header className="guard-header">
       <div className="guard-brand"><span className="guard-mark">D</span><div><strong>DARSON</strong><small>Guard desk · {status?.site ?? "Connecting"}</small></div></div>
       <nav aria-label="Desk views">
-        <button className={!history ? "active" : ""} onClick={() => setHistory(false)}>Active tasks</button>
-        {desk && <button className={history ? "active" : ""} onClick={() => setHistory(true)}>Recent outcomes</button>}
+        <button className={view === "tasks" ? "active" : ""} onClick={() => { setHistory(false); setView("tasks"); }}>Active tasks</button>
+        {desk && <button className={view === "cameras" ? "active" : ""} onClick={() => setView("cameras")}>Live cameras</button>}
+        {desk && <button className={view === "video" ? "active" : ""} onClick={() => setView("video")}>Video test</button>}
+        {desk && <button className={view === "schedule" ? "active" : ""} onClick={() => setView("schedule")}>Guard shifts</button>}
+        {desk && <button className={view === "outcomes" ? "active" : ""} onClick={() => { setHistory(true); setView("outcomes"); }}>Recent outcomes</button>}
         {role === "supervisor" && <button onClick={onOpenSupervisor}>Supervisor review</button>}
       </nav>
       <div className="guard-session">
@@ -122,6 +129,10 @@ export function GuardDesk({ onOpenSupervisor }: { onOpenSupervisor: () => void }
     </header>
     {status?.simulated && <div className="guard-demo" role="status">SIMULATED / DEVELOPMENT — external messages are suppressed.</div>}
     {error && <div className="guard-warning" role="alert">{error}<button onClick={() => void reload()}>Retry connection</button></div>}
+    {view === "cameras" && desk && <CameraWall />}
+    {view === "video" && desk && <VideoDemo />}
+    {view === "schedule" && desk && <GuardSchedule role={role} simulated={Boolean(status?.simulated)} siteTimezone={status?.timezone ?? ""} />}
+    {(view === "tasks" || view === "outcomes") && <>
     <div className="guard-summary">
       <span><b>{tasks.filter(task => task.state !== "resolved").length}</b> active tasks</span>
       <span><b>{cameras.length ? cameras.filter(camera => camera.stream_state === "offline").length : "—"}</b> cameras offline</span>
@@ -187,5 +198,6 @@ export function GuardDesk({ onOpenSupervisor }: { onOpenSupervisor: () => void }
           try { await api.retryPilotNotice(notice.id); await reload(); } catch { setActionError("Configure the recipient's contact before retrying delivery."); }
         }}>Retry after contact correction</button>}</div>)}
     </section>}
+    </>}
   </div>;
 }

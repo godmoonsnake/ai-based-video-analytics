@@ -74,7 +74,7 @@ def apply_action(db, incident_id, body):
             raise HTTPException(422, "post not found in site")
         if body.shift_id:
             shift = db.get(Shift, body.shift_id)
-            if not shift or shift.subject != subject or shift.post_id != body.post_id or not shift.starts_at <= now < shift.ends_at:
+            if not shift or shift.cancelled_at is not None or shift.subject != subject or shift.post_id != body.post_id or not shift.starts_at <= now < shift.ends_at:
                 raise HTTPException(422, "shift does not cover assignee/post/current time")
         if ep is None:
             policy = db.scalar(select(SLAPolicy).order_by(SLAPolicy.created_at.desc()).limit(1))

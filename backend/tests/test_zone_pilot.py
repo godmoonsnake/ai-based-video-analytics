@@ -19,6 +19,7 @@ from app.pilot.schedule import active_at
 from app.pilot.notifications import deliver
 from app.api.routes.pilot import TaskAction
 from app.pilot.service import act
+from app.security.context import Scope, scoped
 
 
 @pytest.fixture
@@ -226,6 +227,67 @@ def test_development_never_sends_external_messages(pilot):
         row = db.scalar(select(PilotNotice))
         deliver(db, row.id, sender=lambda _: pytest.fail("demo sent external message"))
         assert row.status == "suppressed"
+
+
+def test_guard_registers_and_removes_only_its_current_phone(pilot):
+    from app.api.routes.pilot import MobileDeviceIn, register_mobile_device, remove_mobile_device
+
+    first = "first-guard-installation-123456"
+    second = "second-guard-installation-123456"
+    with scoped(Scope("development", "site_a", "guard", "responder")):
+        with SessionLocal() as db:
+            assert register_mobile_device(MobileDeviceIn(installation_id=first), db)["registered"]
+            contact = db.scalar(select(PilotContact).where(PilotContact.subject == "guard"))
+            assert (contact.channel, contact.destination) == ("fcm", first)
+            assert contact.last_registered_at is not None
+            register_mobile_device(MobileDeviceIn(installation_id=second), db)
+            remove_mobile_device(MobileDeviceIn(installation_id=first), db)
+            assert db.scalar(select(PilotContact).where(PilotContact.subject == "guard")).destination == second
+            remove_mobile_device(MobileDeviceIn(installation_id=second), db)
+            assert db.scalar(select(PilotContact).where(PilotContact.subject == "guard")) is None
+
+
+def test_fcm_push_contains_only_task_reference(pilot, monkeypatch):
+    from types import SimpleNamespace
+    from app.pilot import notifications
+
+    monkeypatch.setattr(notifications, "_fcm_credentials", lambda: {"project_id": "darson-pilot"})
+    monkeypatch.setattr(notifications, "_fcm_access_token", lambda credentials: "access-token")
+    sent = []
+
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {"name": "projects/darson-pilot/messages/1"}
+
+    def fake_post(url, **kwargs):
+        sent.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr(notifications.httpx, "post", fake_post)
+    notifications._send_fcm(SimpleNamespace(destination="device-installation", case_id="task-123"))
+    url, call = sent[0]
+    assert url == "https://fcm.googleapis.com/v1/projects/darson-pilot/messages:send"
+    assert call["json"]["message"]["data"] == {"task_id": "task-123"}
+    assert call["json"]["message"]["fid"] == "device-installation"
+    assert call["json"]["message"]["android"]["priority"] == "HIGH"
+    assert "notification" not in call["json"]["message"]
+
+
+def test_stale_phone_is_not_treated_as_delivered(pilot, monkeypatch):
+    with SessionLocal() as db:
+        guard = db.scalar(select(PilotContact).where(PilotContact.subject == "guard"))
+        guard.channel = "fcm"
+        guard.destination = "old-installation-id-123456789"
+        guard.last_registered_at = time.time() - 31 * 86400
+        db.commit()
+        value = event(db, time.time())
+        process_event(db, value.id)
+        row = db.scalar(select(PilotNotice).where(PilotNotice.reason == "assigned_guard"))
+        monkeypatch.setattr(pilot, "environment", "production")
+        with pytest.raises(RuntimeError):
+            deliver(db, row.id, sender=lambda _: pytest.fail("stale phone was sent a notice"))
+        assert row.status == "retrying" and row.failure_class == "RuntimeError"
+        assert db.scalar(select(PilotNotice).where(PilotNotice.reason == "guard_delivery_failed"))
 
 
 def test_guard_cannot_read_other_task_but_can_read_assigned_evidence(

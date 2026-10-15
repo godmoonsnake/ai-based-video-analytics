@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     oidc_jwks_file: str = ""
     require_mfa: bool = True
     notification_provider: str = "local"
+    # Mounted service-account JSON for the Firebase project used by guard phones.
+    fcm_service_account_file: str = ""
     # Production Compose enables the narrow pilot. Legacy research demos remain opt-in.
     pilot_mode: bool = False
     pilot_data_agreement_ref: str = ""

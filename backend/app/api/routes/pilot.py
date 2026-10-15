@@ -306,6 +306,46 @@ class ContactIn(BaseModel):
     destination: str = Field(min_length=1, max_length=100)
 
 
+class MobileDeviceIn(BaseModel):
+    installation_id: str = Field(min_length=20, max_length=128)
+
+
+@router.put("/pilot/mobile-device")
+def register_mobile_device(body: MobileDeviceIn, db=Depends(get_db)):
+    """One active phone per guard and site; the guard owns its installation ID."""
+    scope = require_role(db, {"responder"})
+    if not body.installation_id.isascii() or any(char.isspace() for char in body.installation_id):
+        raise HTTPException(422, "invalid installation ID")
+    if get_settings().environment == "production" and not get_settings().fcm_service_account_file:
+        raise HTTPException(503, "mobile push is not configured")
+    from app.pilot.service import contact_for, marker_key
+
+    row = contact_for(db, scope.actor)
+    if row is None:
+        db.add(PilotContact(id=marker_key(db, "contact", scope.actor),
+                            subject=scope.actor, channel="fcm", destination=body.installation_id,
+                            last_registered_at=time.time()))
+    else:
+        row.channel, row.destination, row.last_registered_at = "fcm", body.installation_id, time.time()
+    db.add(AuditLog(actor=scope.actor, action="pilot_mobile_device_registered", target=scope.actor))
+    db.commit()
+    return {"registered": True}
+
+
+@router.delete("/pilot/mobile-device")
+def remove_mobile_device(body: MobileDeviceIn, db=Depends(get_db)):
+    scope = require_role(db, {"responder"})
+    from app.pilot.service import contact_for
+
+    row = contact_for(db, scope.actor)
+    # A previous phone must not unregister its replacement after handover.
+    if row and row.channel == "fcm" and row.destination == body.installation_id:
+        db.delete(row)
+        db.add(AuditLog(actor=scope.actor, action="pilot_mobile_device_removed", target=scope.actor))
+        db.commit()
+    return {"registered": False}
+
+
 @router.put("/config/pilot/contacts/{subject}")
 def contact(subject: str, body: ContactIn, db=Depends(get_db)):
     scope = require_role(db, CONFIG_ROLES)
